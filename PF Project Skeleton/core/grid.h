@@ -8,25 +8,29 @@
 // ============================================================================
 
 // Check if a position is within grid bounds
-bool isInBounds();
+bool isInBounds(int x , int y);
 
 // Check if a tile is a track (can trains move on it?)
-bool isTrackTile();
+bool isTrackTile(int x , int y);
 
 // Check if a tile is a switch (A-Z)
-bool isSwitchTile();
+bool isSwitchTile(int x , int y);
 
 // Get the switch index (0-25) from a switch character (A-Z)
-int getSwitchIndex();
+// ADDED: (char c) because we need to know the letter
+int getSwitchIndex(char c);
 
 // Check if a position is a spawn point
-bool isSpawnPoint();
+bool isSpawnPoint(int x , int y);
 
 // Check if a position is a destination point
-bool isDestinationPoint();
+bool isDestinationPoint(int x , int y);
 
 // Place or remove a safety tile at a position (for mouse editing)
 // Returns true if successful
-bool toggleSafetyTile();
+bool toggleSafetyTile(int x , int y);
+
+// REQUIRED: Visualization function (Phase 1)
+void printGrid();
 
 #endif
