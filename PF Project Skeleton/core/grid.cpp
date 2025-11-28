@@ -1,4 +1,3 @@
-#include<iostream>
 #include "grid.h"
 #include "simulation_state.h"
 
@@ -10,6 +9,7 @@
 // Check if a position is inside the grid.
 // ----------------------------------------------------------------------------
 bool isInBounds(int x, int y) {
+    // Uses global grid_cols/rows from simulation_state.h
     return (x >= 0 && x < grid_cols && y >= 0 && y < grid_rows);
 }
 
