@@ -14,17 +14,18 @@ void spawnTrainsForTick();
 // ----------------------------------------------------------------------------
 // TRAIN ROUTING
 // ----------------------------------------------------------------------------
-// Compute routes for all trains (Phase 2).
+// Compute routes for all active trains (Phase 2).
 void determineAllRoutes();
 
-// Compute next position/direction for a train.
-bool determineNextPosition();
+// Helper: Compute next position/direction for a specific train.
+// Returns true if a valid move exists.
+bool determineNextPosition(int trainIdx);
 
-// Get next direction on entering a tile.
-int getNextDirection();
+// Helper: Get next direction when entering a tile (curves, switches).
+int getNextDirection(int trainIdx);
 
-// Choose best direction at a crossing.
-int getSmartDirectionAtCrossing();
+// Helper: Choose best direction at a crossing '+' to get closer to D.
+int getSmartDirectionAtCrossing(int trainIdx);
 
 // ----------------------------------------------------------------------------
 // TRAIN MOVEMENT
@@ -35,7 +36,7 @@ void moveAllTrains();
 // ----------------------------------------------------------------------------
 // COLLISION DETECTION
 // ----------------------------------------------------------------------------
-// Detect trains targeting the same tile/swap/crossing.
+// Detect trains targeting the same tile/swap/crossing and apply Priority.
 void detectCollisions();
 
 // ----------------------------------------------------------------------------
