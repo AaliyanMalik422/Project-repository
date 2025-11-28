@@ -2,19 +2,19 @@
 #define SWITCHES_H
 
 // ============================================================================
-// SWITCHES.H - Switch logic
+// SWITCHES.H - Switch logic (Updated signatures)
 // ============================================================================
 
 // ----------------------------------------------------------------------------
 // SWITCH COUNTER UPDATE
 // ----------------------------------------------------------------------------
-// Increment counters when trains enter switches.
+// Increment/Decrement counters when trains enter switches.
 void updateSwitchCounters();
 
 // ----------------------------------------------------------------------------
 // FLIP QUEUE
 // ----------------------------------------------------------------------------
-// Queue flips when counters reach K.
+// Queue flips when counters reach 0.
 void queueSwitchFlips();
 
 // ----------------------------------------------------------------------------
@@ -30,15 +30,15 @@ void applyDeferredFlips();
 void updateSignalLights();
 
 // ----------------------------------------------------------------------------
-// SWITCH TOGGLE (for manual control / editing)
+// SWITCH TOGGLE
 // ----------------------------------------------------------------------------
 // Manually toggle a switch state.
-void toggleSwitchState();
+void toggleSwitchState(int switchIndex);
 
 // ----------------------------------------------------------------------------
 // HELPER FUNCTIONS
 // ----------------------------------------------------------------------------
 // Get state for a given direction.
-int getSwitchStateForDirection();
+int getSwitchStateForDirection(int switchIndex, int direction);
 
 #endif
