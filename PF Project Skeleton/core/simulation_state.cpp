@@ -1,19 +1,108 @@
 #include "simulation_state.h"
 
-// Implementation of the initialization helper
-void initializeSimulation(int t_active[], int t_count, int s_count, int& rows, int& cols) {
-    // 1. Reset Dimensions
-    rows = 0;
-    cols = 0;
-    
-    // 2. Reset Counts
-    // These track how many items are actually in the arrays
-    // t_count = 0; // Usually set by loadLevel, but good practice to reset
-    // s_count = 0;
+// ============================================================================
+// SIMULATION_STATE.CPP - Global state definitions
+// ============================================================================
+// This file allocates memory for the extern variables declared in the header.
+// ============================================================================
 
-    // 3. Clear Active Status of Trains
-    // This ensures no "ghost trains" exist from a previous run
-    for (int i = 0; i < MAX_TRAINS; i++) {
-        t_active[i] = 0; // 0 = Inactive (Dead)
+// ----------------------------------------------------------------------------
+// GRID
+// ----------------------------------------------------------------------------
+char grid[MAX_ROWS][MAX_COLS];
+int grid_rows = 0;
+int grid_cols = 0;
+
+// ----------------------------------------------------------------------------
+// TRAINS
+// ----------------------------------------------------------------------------
+int train_id[MAX_TRAINS];
+int train_x[MAX_TRAINS];
+int train_y[MAX_TRAINS];
+int train_direction[MAX_TRAINS];
+int train_color[MAX_TRAINS];
+int train_spawn_tick[MAX_TRAINS];
+bool train_active[MAX_TRAINS];
+bool train_finished[MAX_TRAINS];
+
+// For Collision Logic
+int train_next_x[MAX_TRAINS];
+int train_next_y[MAX_TRAINS];
+int train_dest_x[MAX_TRAINS];
+int train_dest_y[MAX_TRAINS];
+
+int total_trains = 0;
+
+// ----------------------------------------------------------------------------
+// SWITCHES
+// ----------------------------------------------------------------------------
+int switch_x[MAX_SWITCHES];
+int switch_y[MAX_SWITCHES];
+int switch_state[MAX_SWITCHES];
+bool switch_active[MAX_SWITCHES];
+bool switch_is_global[MAX_SWITCHES];
+
+int switch_k_values[MAX_SWITCHES][4];
+int switch_counters[MAX_SWITCHES][4];
+bool switch_flip_queued[MAX_SWITCHES];
+
+// ----------------------------------------------------------------------------
+// SIMULATION PARAMETERS
+// ----------------------------------------------------------------------------
+int current_tick = 0;
+int simulation_seed = 0;
+
+// ----------------------------------------------------------------------------
+// INITIALIZATION FUNCTION
+// ----------------------------------------------------------------------------
+void initializeSimulationState() {
+    // 1. Reset Grid Dimensions
+    grid_rows = 0;
+    grid_cols = 0;
+    
+    // 2. Reset Grid Map (Fill with dots or nulls)
+    for(int r=0; r<MAX_ROWS; r++) {
+        for(int c=0; c<MAX_COLS; c++) {
+            grid[r][c] = '.'; 
+        }
     }
+
+    // 3. Reset Trains
+    total_trains = 0;
+    for(int i=0; i<MAX_TRAINS; i++) {
+        train_id[i] = -1;
+        train_active[i] = false;
+        train_finished[i] = false;
+        
+        // -1 indicates invalid/off-map
+        train_x[i] = -1;
+        train_y[i] = -1;
+        train_next_x[i] = -1;
+        train_next_y[i] = -1;
+        train_dest_x[i] = -1;
+        train_dest_y[i] = -1;
+        
+        train_direction[i] = 0;
+        train_color[i] = 0;
+        train_spawn_tick[i] = 0;
+    }
+
+    // 4. Reset Switches
+    for(int i=0; i<MAX_SWITCHES; i++) {
+        switch_active[i] = false;
+        switch_flip_queued[i] = false;
+        switch_state[i] = 0; // Default Straight
+        switch_x[i] = -1;
+        switch_y[i] = -1;
+        switch_is_global[i] = false;
+
+        for(int d=0; d<4; d++) {
+            switch_k_values[i][d] = 0;
+            switch_counters[i][d] = 0;
+        }
+    }
+
+    // 5. Reset Globals
+    current_tick = 0;
+    simulation_seed = 0;
 }
