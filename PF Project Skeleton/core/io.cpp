@@ -18,6 +18,7 @@ using namespace std;
 // ----------------------------------------------------------------------------
 // Load a .lvl file into global state.
 // ----------------------------------------------------------------------------
+
 bool loadLevelFile(string filepath) {
     ifstream file(filepath);
     if (!file.is_open()) {
@@ -70,9 +71,12 @@ bool loadLevelFile(string filepath) {
             file >> modeStr >> s->state; // Read "PER_DIR" and Init State (0/1)
             
             // Read 4 counters
+            
             for(int i=0; i<4; i++) file >> s->kValues[i];
 
+            
             // Find X/Y on grid
+            
             for(int r=0; r<state.rows; r++) {
                 for(int c=0; c<state.cols; c++) {
                     if(state.grid[r][c] == s->type) {
@@ -113,6 +117,7 @@ bool loadLevelFile(string filepath) {
 // ----------------------------------------------------------------------------
 // Create/clear CSV logs with headers.
 // ----------------------------------------------------------------------------
+
 void initializeLogFiles() {
     ofstream trace("out/trace.csv");
     trace << "Tick,TrainID,X,Y,Direction,State" << endl;
@@ -135,6 +140,7 @@ void initializeLogFiles() {
 // ----------------------------------------------------------------------------
 // Append tick, train id, position, direction, state to trace.csv.
 // ----------------------------------------------------------------------------
+
 void logTrainTrace() {
     ofstream file("out/trace.csv", ios::app); // Open in append mode
     for(int i = 0; i < state.trainCount; i++) {
@@ -149,11 +155,13 @@ void logTrainTrace() {
     }
 }
 
+
 // ----------------------------------------------------------------------------
 // LOG SWITCH STATE
 // ----------------------------------------------------------------------------
 // Append tick, switch id/mode/state to switches.csv.
 // ----------------------------------------------------------------------------
+
 void logSwitchState() {
     ofstream file("out/switches.csv", ios::app);
     for(int i = 0; i < state.switchCount; i++) {
