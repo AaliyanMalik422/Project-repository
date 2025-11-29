@@ -60,12 +60,12 @@ bool initializeApp() {
         "Sprites/track_vertical.png",     // TEX_VERT
         "Sprites/track_diagonal_up.png",      // TEX_DIAG_UP
         "Sprites/track_diagonal_down.png",    // TEX_DIAG_DOWN
-        "Sprites/track_intersection.png", // TEX_INTERSECTION
-        "Sprites/switch.png",             // TEX_SWITCH
-        "Sprites/source.png",             // TEX_SOURCE
-        "Sprites/destination.png",        // TEX_DESTINATION
-        "Sprites/safety.png",             // TEX_SAFETY
-        "Sprites/train.png"               // TEX_TRAIN
+        "Sprites/track_cross.png", // TEX_INTERSECTION
+        "Sprites/switch_A.png",             // TEX_SWITCH
+        "Sprites/tile_source_tile.png",             // TEX_SOURCE
+        "Sprites/tile_destination_tile.png",        // TEX_DESTINATION
+        "Sprites/tile_safety.png",             // TEX_SAFETY
+        "Sprites/train_up.png"               // TEX_TRAIN
     };
 
     bool ok = true;

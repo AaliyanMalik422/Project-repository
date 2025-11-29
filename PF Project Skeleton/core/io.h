@@ -3,19 +3,20 @@
 
 #include <string>
 
-// Load a .lvl file from path
+// Loads a .lvl level file and populates global arrays.
+// Returns true on success.
 bool loadLevelFile(std::string filepath);
 
-// Create/clear log files
+// Initializes all CSV/TXT log files (trace.csv, switches.csv, metrics.txt)
 void initializeLogFiles();
 
-// Append train movement to trace.csv
+// Logs train movement to trace.csv (APPEND MODE)
 void logTrainTrace();
 
-// Append switch state to switches.csv
+// Logs switch state changes to switches.csv (APPEND MODE)
 void logSwitchState();
 
-// Write final metrics to metrics.txt
+// Writes summary metrics (total trains, delivered trains)
 void writeMetrics();
 
 #endif

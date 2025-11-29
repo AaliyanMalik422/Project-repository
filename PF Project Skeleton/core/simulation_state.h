@@ -52,6 +52,9 @@ extern int train_dest_y[MAX_TRAINS];
 
 extern int total_trains; // How many loaded from file
 
+extern int train_prev_x[MAX_TRAINS];
+extern int train_prev_y[MAX_TRAINS];
+
 // ----------------------------------------------------------------------------
 // GLOBAL STATE: SWITCHES (A-Z mapped to 0-25)
 // ----------------------------------------------------------------------------

@@ -22,19 +22,23 @@ int getManhattanDistance(int x1, int y1, int x2, int y2) {
 // ----------------------------------------------------------------------------
 // SPAWN TRAINS FOR CURRENT TICK
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// SPAWN TRAINS FOR CURRENT TICK (FIXED)
+// ----------------------------------------------------------------------------
 void spawnTrainsForTick() {
     for (int i = 0; i < total_trains; i++) {
-        // If not active, not finished, and it's time to spawn
-        if (!train_active[i] && !train_finished[i] && train_spawn_tick[i] == current_tick) {
-            
-            // Retrieve the spawn coordinates we stored in 'next' during loading
-            int sx = train_next_x[i];
-            int sy = train_next_y[i];
-            
-            // Basic check: Is the spawn point blocked?
+
+        if (!train_active[i] && !train_finished[i] &&
+            train_spawn_tick[i] == current_tick) {
+
+            int sx = train_x[i];
+            int sy = train_y[i];
+
+            // Check if spawn is blocked
             bool blocked = false;
             for(int j=0; j<total_trains; j++) {
-                if(train_active[j] && train_x[j] == sx && train_y[j] == sy) {
+                if (train_active[j] &&
+                    train_x[j] == sx && train_y[j] == sy) {
                     blocked = true;
                     break;
                 }
@@ -42,29 +46,12 @@ void spawnTrainsForTick() {
 
             if (!blocked) {
                 train_active[i] = true;
-                train_x[i] = sx;
-                train_y[i] = sy;
-                
-                // IMPORTANT: In a real logic implementation, we need to find the 
-                // correct destination D. For now, we default to the first D we find 
-                // or assume it's set in a smarter way later.
-                // Scan for a destination if one isn't set
-                if(train_dest_x[i] == -1) {
-                    for(int r=0; r<grid_rows; r++) {
-                        for(int c=0; c<grid_cols; c++) {
-                            if(isDestinationPoint(c, r)) {
-                                train_dest_x[i] = c;
-                                train_dest_y[i] = r;
-                                goto found_dest; // Break out of double loop
-                            }
-                        }
-                    }
-                }
-                found_dest:;
+                // train_x & train_y already correct 
             }
         }
     }
 }
+
 
 // ----------------------------------------------------------------------------
 // HELPER: GET NEXT DIRECTION
@@ -185,8 +172,24 @@ void moveAllTrains() {
         if (train_active[i]) {
             // Only move if the next tile is valid and in bounds
             if (isInBounds(train_next_x[i], train_next_y[i])) {
+                int nx = train_next_x[i];
+                int ny = train_next_y[i];
+
+            if (nx < 0 || nx >= grid_cols || ny < 0 || ny >= grid_rows ||
+                grid[ny][nx] == '.' || grid[ny][nx] == ' ')
+            {
+                // Off map OR landing on empty cell => train is considered delivered/removed
+                train_active[i] = false;
+                train_finished[i] = true;
+                continue;
+            }
+
+                train_prev_x[i] = train_x[i];
+                train_prev_y[i] = train_y[i];
                 train_x[i] = train_next_x[i];
                 train_y[i] = train_next_y[i];
+
+                
             }
         }
     }
@@ -207,8 +210,8 @@ void checkArrivals() {
     }
 }
 
-// Stubs for currently unused helpers
+/* Stubs for currently unused helpers
 bool determineNextPosition(int trainIdx) { return true; }
 int getSmartDirectionAtCrossing(int trainIdx) { return 0; }
 void applyEmergencyHalt() {}
-void updateEmergencyHalt() {}
+void updateEmergencyHalt() {} */

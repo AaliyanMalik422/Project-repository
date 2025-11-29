@@ -30,6 +30,7 @@ void initializeSimulation() {
 // ----------------------------------------------------------------------------
 void simulateOneTick() {
     current_tick++;
+    std::cout << "simulateOneTick(): advancing to tick " << current_tick << std::endl;
 
     // 1. Spawn: Align trains scheduled for this tick
     spawnTrainsForTick();

@@ -18,23 +18,35 @@ using namespace std;
 // ----------------------------------------------------------------------------
 void updateSwitchCounters() {
     for (int t = 0; t < total_trains; t++) {
-        // Skip inactive trains
         if (!train_active[t]) continue;
 
-        // Check against all switches
+        int curX = train_x[t];
+        int curY = train_y[t];
+        int prevX = train_prev_x[t];
+        int prevY = train_prev_y[t];
+
+        // If this is the first tick train appears → treat as entering
+        bool firstTime = (prevX == -1 && prevY == -1);
+
         for (int s = 0; s < MAX_SWITCHES; s++) {
             if (!switch_active[s]) continue;
 
-            // Is the train exactly on the switch coordinates?
-            if (train_x[t] == switch_x[s] && train_y[t] == switch_y[s]) {
-                
-                // Get the direction the train is facing (0=UP, 1=RIGHT, etc.)
-                int dir = train_direction[t];
+            // Does the train MOVE *into* the switch this tick?
+            if (curX == switch_x[s] && curY == switch_y[s]) {
 
-                // Decrement the counter for this specific switch and direction
-                // (Assuming we count down from K to 0)
-                if (switch_counters[s][dir] > 0) {
-                    switch_counters[s][dir]--;
+                bool entered =
+                    firstTime ||
+                    !(prevX == curX && prevY == curY);
+
+                if (entered) {
+                    int dir = train_direction[t];  // 0=UP,1=RIGHT,2=DOWN,3=LEFT
+
+                    if (dir >= 0 && dir < 4 && switch_counters[s][dir] > 0) {
+                        switch_counters[s][dir]--;
+                        // Optional debug:
+                        // cout << "Switch " << char('A'+s)
+                        //      << " decremented on dir=" << dir << "\n";
+                    }
                 }
             }
         }
@@ -112,9 +124,10 @@ void toggleSwitchState(int switchIndex) {
 // Returns the state (0 or 1). Currently returns the global state,
 // but can be modified if your switches have different states per direction.
 // ----------------------------------------------------------------------------
-int getSwitchStateForDirection(int switchIndex, int direction) {
+int getSwitchStateForDirection(int switchIndex) {
+
     if (switchIndex >= 0 && switchIndex < MAX_SWITCHES) {
         return switch_state[switchIndex];
     }
-    return 0; // Default error
+    return 0;
 }

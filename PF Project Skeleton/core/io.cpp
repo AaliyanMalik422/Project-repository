@@ -2,167 +2,239 @@
 #include <fstream>
 #include <string>
 #include <cstdlib>
+#include <sstream>
 #include "simulation_state.h"
 #include "io.h"
 
 using namespace std;
 
-// ============================================================================
-// IO.CPP - Level I/O and logging (Parallel Arrays Version)
-// ============================================================================
+// ---------------------------------------------------------------------------
+// Helper: trim whitespace
+// ---------------------------------------------------------------------------
+static string trim(const string &s) {
+    int a = 0, b = (int)s.size() - 1;
+    while (a <= b && isspace((unsigned char)s[a])) a++;
+    while (b >= a && isspace((unsigned char)s[b])) b--;
+    if (b < a) return "";
+    return s.substr(a, b - a + 1);
+}
 
-// ----------------------------------------------------------------------------
+// ============================================================================
 // LOAD LEVEL FILE
-// ----------------------------------------------------------------------------
+// ============================================================================
 bool loadLevelFile(string filepath) {
+
     ifstream file(filepath);
     if (!file.is_open()) {
-        cout << "Error: Could not open level file " << filepath << endl;
+        cout << "Error: Cannot open level file " << filepath << "\n";
         return false;
     }
 
-    // 1. Reset Global Counters
+    // Reset globals
     total_trains = 0;
     current_tick = 0;
-    
-    // Initialize switch active states to false
-    for(int i=0; i<MAX_SWITCHES; i++) switch_active[i] = false;
 
-    string line;
-    string section = "HEADER";
+    for (int i = 0; i < MAX_SWITCHES; i++)
+        switch_active[i] = false;
+
+    string rawLine;
+    string section = "NONE";
     int mapRow = 0;
 
-    // 2. Parse the File
-    while (file >> line) {
-        if (line == "MAP:") { section = "MAP"; continue; } 
-        else if (line == "SWITCHES:") { section = "SWITCHES"; continue; } 
-        else if (line == "TRAINS:") { section = "TRAINS"; continue; }
+    while (getline(file, rawLine)) {
 
-        if (section == "HEADER") {
-            if (line == "ROWS:") file >> grid_rows;
-            else if (line == "COLS:") file >> grid_cols;
+        string line = trim(rawLine);
+        if (line.empty()) continue;
+
+        // Detect section headers
+        if (line == "ROWS:")       { section = "ROWS"; continue; }
+        if (line == "COLS:")       { section = "COLS"; continue; }
+        if (line == "SEED:")       { section = "SEED"; continue; }
+        if (line == "WEATHER:")    { section = "WEATHER"; continue; }
+        if (line == "MAP:")        { section = "MAP"; mapRow = 0; continue; }
+        if (line == "SWITCHES:")   { section = "SWITCHES"; continue; }
+        if (line == "TRAINS:")     { section = "TRAINS"; continue; }
+
+        // --------------------------
+        // ROWS
+        // --------------------------
+        if (section == "ROWS") {
+            grid_rows = atoi(line.c_str());
+            continue;
         }
-        else if (section == "MAP") {
+
+        // --------------------------
+        // COLS
+        // --------------------------
+        if (section == "COLS") {
+            grid_cols = atoi(line.c_str());
+            continue;
+        }
+
+        // --------------------------
+        // SEED
+        // --------------------------
+        if (section == "SEED") {
+            simulation_seed = atoi(line.c_str());
+            continue;
+        }
+
+        // WEATHER ignored
+        if (section == "WEATHER") continue;
+
+        // --------------------------
+        // MAP — FIXED VERSION
+        // --------------------------
+        if (section == "MAP") {
+
             if (mapRow < grid_rows) {
-                for (int c = 0; c < line.length() && c < MAX_COLS; c++) {
-                    grid[mapRow][c] = line[c];
+
+                string rowLine = rawLine;
+
+                // pad if short
+                if ((int)rowLine.size() < grid_cols) {
+                    rowLine.append(grid_cols - rowLine.size(), ' ');
                 }
+
+                // Convert spaces → '.' so trains can move
+                for (int c = 0; c < grid_cols && c < MAX_COLS; c++) {
+                    char ch = (c < (int)rowLine.size() ? rowLine[c] : ' ');
+                    if (ch == ' ') ch = '.';
+                    grid[mapRow][c] = ch;
+                }
+
                 mapRow++;
             }
+            continue;
         }
-        else if (section == "SWITCHES") {
-            // Line format: A PER_DIR 0 5 5 5 5
-            char type = line[0]; 
-            int idx = type - 'A'; // Convert 'A' -> 0, 'B' -> 1
-            
-            if (idx >= 0 && idx < MAX_SWITCHES) {
-                switch_active[idx] = true;
-                string modeStr;
-                file >> modeStr >> switch_state[idx]; 
-                
-                // Determine logic based on string (Simplified logic)
-                // In your header, you have separate arrays for k-values
-                for(int i=0; i<4; i++) {
-                    file >> switch_k_values[idx][i];
-                    switch_counters[idx][i] = switch_k_values[idx][i]; // Init counters
-                }
 
-                // Find X/Y on grid for this switch
-                for(int r=0; r<grid_rows; r++) {
-                    for(int c=0; c<grid_cols; c++) {
-                        if(grid[r][c] == type) {
-                            switch_x[idx] = c;
-                            switch_y[idx] = r;
-                        }
+        // --------------------------
+        // SWITCHES
+        // --------------------------
+        if (section == "SWITCHES") {
+            istringstream ss(line);
+            char swChar;
+            if (!(ss >> swChar)) continue;
+            int idx = swChar - 'A';
+            if (idx < 0 || idx >= MAX_SWITCHES) continue;
+
+            switch_active[idx] = true;
+
+            string modeStr;
+            int state = 0;
+            int k1 = 0, k2 = 0, k3 = 0, k4 = 0;
+
+            ss >> modeStr >> state >> k1 >> k2 >> k3 >> k4;
+
+            switch_state[idx] = state;
+            switch_k_values[idx][0] = k1;
+            switch_k_values[idx][1] = k2;
+            switch_k_values[idx][2] = k3;
+            switch_k_values[idx][3] = k4;
+
+            for (int d = 0; d < 4; d++)
+                switch_counters[idx][d] = switch_k_values[idx][d];
+
+            // find switch XY
+            for (int r = 0; r < grid_rows; r++)
+                for (int c = 0; c < grid_cols; c++)
+                    if (grid[r][c] == swChar) {
+                        switch_x[idx] = c;
+                        switch_y[idx] = r;
                     }
-                }
-            }
-            string dummy; getline(file, dummy); // Skip rest
+
+            continue;
         }
-        else if (section == "TRAINS") {
+
+        // --------------------------
+        // TRAINS — FIXED SINGLE-LINE FORMAT
+        // --------------------------
+        if (section == "TRAINS") {
+
             if (total_trains >= MAX_TRAINS) continue;
-            
-            int idx = total_trains;
-            try {
-                // Line format: SpawnTick X Y Dir Color
-                train_spawn_tick[idx] = stoi(line);
-                file >> train_x[idx] >> train_y[idx] 
-                     >> train_direction[idx] >> train_color[idx];
-                
-                // Set defaults
-                train_id[idx] = idx;
-                train_active[idx] = false;
-                train_finished[idx] = false;
-                
-                total_trains++;
-            } catch (...) { }
+
+            int spawn, x, y, dir, color;
+            istringstream ss(line);
+
+            if (!(ss >> spawn >> x >> y >> dir >> color)) continue;
+
+            int i = total_trains;
+
+            train_spawn_tick[i] = spawn;
+            train_x[i] = x;
+            train_y[i] = y;
+            train_direction[i] = dir;
+            train_color[i] = color;
+
+            train_id[i] = i;
+            train_active[i] = false;
+            train_finished[i] = false;
+
+            total_trains++;
+            continue;
         }
     }
+
     file.close();
-    cout << "Level loaded: " << filepath << endl;
+
+    cout << "Loaded level: " << filepath << "\n";
+    cout << "Rows=" << grid_rows << " Cols=" << grid_cols << "\n";
+    cout << "Trains loaded=" << total_trains << "\n";
+
     return true;
 }
 
-// ----------------------------------------------------------------------------
-// INITIALIZE LOG FILES
-// ----------------------------------------------------------------------------
+// ============================================================================
+// LOG FILES
+// ============================================================================
 void initializeLogFiles() {
     ofstream trace("out/trace.csv");
-    trace << "Tick,TrainID,X,Y,Direction,State" << endl;
-    trace.close();
+    trace << "Tick,TrainID,X,Y,Direction,State\n";
 
-    ofstream switches("out/switches.csv");
-    switches << "Tick,Switch,State" << endl;
-    switches.close();
-    
-    ofstream metrics("out/metrics.txt");
-    metrics.close();
+    ofstream sw("out/switches.csv");
+    sw << "Tick,Switch,State\n";
+
+    ofstream m("out/metrics.txt");
 }
 
-// ----------------------------------------------------------------------------
+// ============================================================================
 // LOG TRAIN TRACE
-// ----------------------------------------------------------------------------
+// ============================================================================
 void logTrainTrace() {
     ofstream file("out/trace.csv", ios::app);
-    for(int i = 0; i < total_trains; i++) {
-        // Access global arrays directly
-        if(train_active[i]) { 
-            file << current_tick << "," 
-                 << train_id[i] << "," 
-                 << train_x[i] << "," 
-                 << train_y[i] << "," 
-                 << train_direction[i] << ",0" << endl;
+    for (int i = 0; i < total_trains; i++) {
+        if (train_active[i]) {
+            file << current_tick << "," << i << ","
+                 << train_x[i] << "," << train_y[i] << ","
+                 << train_direction[i] << ",0\n";
         }
     }
 }
 
-// ----------------------------------------------------------------------------
+// ============================================================================
 // LOG SWITCH STATE
-// ----------------------------------------------------------------------------
+// ============================================================================
 void logSwitchState() {
     ofstream file("out/switches.csv", ios::app);
-    for(int i = 0; i < MAX_SWITCHES; i++) {
-        if(switch_active[i]) {
-            char name = 'A' + i; // Convert index 0 back to 'A'
-            file << current_tick << "," 
-                 << name << ","
-                 << switch_state[i] << endl;
+    for (int s = 0; s < MAX_SWITCHES; s++) {
+        if (switch_active[s]) {
+            file << current_tick << "," << (char)('A' + s)
+                 << "," << switch_state[s] << "\n";
         }
     }
 }
 
-// ----------------------------------------------------------------------------
-// WRITE METRICS
-// ----------------------------------------------------------------------------
+// ============================================================================
+// METRICS
+// ============================================================================
 void writeMetrics() {
     ofstream file("out/metrics.txt");
     int delivered = 0;
-    
-    for(int i = 0; i < total_trains; i++) {
-        if(train_finished[i]) delivered++;
-    }
 
-    file << "Simulation Report" << endl;
-    file << "Total Trains: " << total_trains << endl;
-    file << "Delivered: " << delivered << endl;
+    for (int i = 0; i < total_trains; i++)
+        if (train_finished[i]) delivered++;
+
+    file << "Simulation Report\n";
+    file << "Total trains: " << total_trains << "\n";
+    file << "Delivered: " << delivered << "\n";
 }
