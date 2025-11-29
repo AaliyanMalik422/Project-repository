@@ -2,6 +2,7 @@
 #include "../core/simulation_state.h"
 #include "../core/simulation.h"
 #include "../core/grid.h"
+#include "../core/io.h"
 #include <SFML/Graphics.hpp>
 #include <iostream>
 
@@ -23,11 +24,21 @@ static sf::Texture g_textures[7];
 static bool g_texturesLoaded = false;
 
 bool initializeApp() {
+    initializeSimulationState();   // RESET GLOBALS
+
+    // Load one level — choose one:
+    if (!loadLevelFile("data/levels/easy_level.lvl")) {
+        std::cerr << "Failed to load level!" << std::endl;
+        return false;
+    }
+
+    // Create window & camera
     g_window = new sf::RenderWindow(sf::VideoMode(1024, 768), "Switchback Rails");
     g_window->setFramerateLimit(60);
     g_camera.setSize(1024, 768);
     g_camera.setCenter(512, 384);
 
+    // Load textures
     const char* files[] = {
         "Sprites/5.png", "Sprites/5.png", "Sprites/3.png",
         "Sprites/4.png", "Sprites/4.png", "Sprites/4.png", "Sprites/2.png"
@@ -35,11 +46,18 @@ bool initializeApp() {
 
     bool allGood = true;
     for (int i = 0; i < 7; i++) {
-        if (!g_textures[i].loadFromFile(files[i])) allGood = false;
+        if (!g_textures[i].loadFromFile(files[i]))
+            allGood = false;
     }
     g_texturesLoaded = allGood;
+
+    // Initialize simulation logic
+    initializeSimulation();
+
     return true;
 }
+
+
 
 void runApp() {
     sf::Clock clock;
@@ -77,7 +95,7 @@ void runApp() {
 
         if (timeSinceLastTick >= 0.5f) {
             if (!g_isPaused || g_isStepMode) {
-                // updateSimulation(); // UNCOMMENT WHEN MEMBER B FINISHES
+                simulateOneTick();   
                 g_isStepMode = false;
                 timeSinceLastTick = 0.0f;
             }
