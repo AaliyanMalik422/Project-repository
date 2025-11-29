@@ -27,6 +27,11 @@ extern char grid[MAX_ROWS][MAX_COLS];
 extern int grid_rows;
 extern int grid_cols;
 
+
+
+// --- TRAINS ---
+// CRITICAL: This variable must exist for app.cpp to work!
+extern int train_count;
 // ----------------------------------------------------------------------------
 // GLOBAL STATE: TRAINS (Parallel Arrays)
 // ----------------------------------------------------------------------------
