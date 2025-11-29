@@ -109,7 +109,7 @@ void runApp() {
             }
             // 2. Draw Trains
             sprite.setTexture(g_textures[6]);
-            for (int i = 0; i < train_count; i++) {
+            for (int i = 0; i < total_trains; i++) {
                 if (train_active[i]) {
                     sprite.setPosition(g_gridOffsetX + train_x[i] * g_cellSize, 
                                        g_gridOffsetY + train_y[i] * g_cellSize);
