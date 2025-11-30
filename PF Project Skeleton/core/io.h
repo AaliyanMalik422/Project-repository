@@ -3,6 +3,8 @@
 
 #include <string>
 
+extern int train_wait[MAX_TRAINS];
+extern int train_priority[MAX_TRAINS];
 // Loads a .lvl level file and populates global arrays.
 // Returns true on success.
 bool loadLevelFile(std::string filepath);

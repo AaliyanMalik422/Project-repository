@@ -15,6 +15,7 @@ int train_color[MAX_TRAINS];
 int train_spawn_tick[MAX_TRAINS];
 bool train_active[MAX_TRAINS];
 bool train_finished[MAX_TRAINS];
+int train_arrival_tick[MAX_TRAINS];
 
 int train_next_x[MAX_TRAINS];
 int train_next_y[MAX_TRAINS];

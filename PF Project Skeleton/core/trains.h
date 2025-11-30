@@ -1,6 +1,7 @@
 #ifndef TRAINS_H
 #define TRAINS_H
 
+extern int getManhattanDistance(int x1, int y1, int x2, int y2);
 // ============================================================================
 // TRAINS.H - Train logic
 // ============================================================================

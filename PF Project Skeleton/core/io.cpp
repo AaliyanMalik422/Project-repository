@@ -2,11 +2,15 @@
 #include <fstream>
 #include <string>
 #include <cstdlib>
-#include <sstream>
+#include <cstring>
 #include "simulation_state.h"
 #include "io.h"
+#include "trains.h"
 
 using namespace std;
+
+int train_wait[MAX_TRAINS];
+int train_priority[MAX_TRAINS];
 
 static string trim(const string &s) {
     int a = 0, b = (int)s.size() - 1;
@@ -18,15 +22,22 @@ static string trim(const string &s) {
 
 bool loadLevelFile(string filepath) {
 
+    cout << "DEBUG: Attempting to load: " << filepath << endl;
+
     ifstream file(filepath);
     if (!file.is_open()) {
         cout << "Error: Cannot open level file " << filepath << "\n";
         return false;
     }
 
+    cout << "DEBUG: File opened successfully!" << endl;
+
     total_trains = 0;
-    train_count = 0;  // FIXED: Initialize train_count
+    train_count = 0;
     current_tick = 0;
+    
+    grid_rows = 0;
+    grid_cols = 0;
 
     for (int i = 0; i < MAX_SWITCHES; i++)
         switch_active[i] = false;
@@ -50,7 +61,7 @@ bool loadLevelFile(string filepath) {
 
         if (section == "ROWS") {
             grid_rows = atoi(line.c_str());
-            // FIXED: Clamp grid_rows to MAX_ROWS
+            cout << "DEBUG: Read ROWS = " << grid_rows << endl;
             if (grid_rows > MAX_ROWS) {
                 cout << "Warning: grid_rows=" << grid_rows << " exceeds MAX_ROWS=" << MAX_ROWS << ", clamping.\n";
                 grid_rows = MAX_ROWS;
@@ -60,7 +71,7 @@ bool loadLevelFile(string filepath) {
 
         if (section == "COLS") {
             grid_cols = atoi(line.c_str());
-            // FIXED: Clamp grid_cols to MAX_COLS
+            cout << "DEBUG: Read COLS = " << grid_cols << endl;
             if (grid_cols > MAX_COLS) {
                 cout << "Warning: grid_cols=" << grid_cols << " exceeds MAX_COLS=" << MAX_COLS << ", clamping.\n";
                 grid_cols = MAX_COLS;
@@ -76,7 +87,6 @@ bool loadLevelFile(string filepath) {
         if (section == "WEATHER") continue;
 
         if (section == "MAP") {
-            // FIXED: Check BOTH grid_rows AND MAX_ROWS
             if (mapRow < grid_rows && mapRow < MAX_ROWS) {
 
                 string rowLine = rawLine;
@@ -85,7 +95,6 @@ bool loadLevelFile(string filepath) {
                     rowLine.append(grid_cols - rowLine.size(), ' ');
                 }
 
-                // FIXED: Ensure we don't exceed MAX_COLS
                 int colLimit = grid_cols;
                 if (colLimit > MAX_COLS) colLimit = MAX_COLS;
 
@@ -101,20 +110,18 @@ bool loadLevelFile(string filepath) {
         }
 
         if (section == "SWITCHES") {
-            istringstream ss(line);
             char swChar;
-            if (!(ss >> swChar)) continue;
+            char modeStr[32];
+            int state = 0;
+            int k1 = 0, k2 = 0, k3 = 0, k4 = 0;
+
+            if (sscanf(line.c_str(), "%c %s %d %d %d %d %d", 
+                       &swChar, modeStr, &state, &k1, &k2, &k3, &k4) < 3) continue;
+
             int idx = swChar - 'A';
             if (idx < 0 || idx >= MAX_SWITCHES) continue;
 
             switch_active[idx] = true;
-
-            string modeStr;
-            int state = 0;
-            int k1 = 0, k2 = 0, k3 = 0, k4 = 0;
-
-            ss >> modeStr >> state >> k1 >> k2 >> k3 >> k4;
-
             switch_state[idx] = state;
             switch_k_values[idx][0] = k1;
             switch_k_values[idx][1] = k2;
@@ -124,7 +131,6 @@ bool loadLevelFile(string filepath) {
             for (int d = 0; d < 4; d++)
                 switch_counters[idx][d] = switch_k_values[idx][d];
 
-            // FIXED: Bounds check grid access
             for (int r = 0; r < grid_rows && r < MAX_ROWS; r++)
                 for (int c = 0; c < grid_cols && c < MAX_COLS; c++)
                     if (grid[r][c] == swChar) {
@@ -136,25 +142,30 @@ bool loadLevelFile(string filepath) {
         }
 
         if (section == "TRAINS") {
-
             if (total_trains >= MAX_TRAINS) continue;
 
-            int spawn, x, y, dir, color;
-            istringstream ss(line);
+            int spawn_tick, dest_x, dest_y, wait_time, priority;
 
-            if (!(ss >> spawn >> x >> y >> dir >> color)) continue;
+            if (sscanf(line.c_str(), "%d %d %d %d %d", 
+                       &spawn_tick, &dest_x, &dest_y, &wait_time, &priority) != 5) continue;
 
             int i = total_trains;
 
-            train_spawn_tick[i] = spawn;
-            train_x[i] = x;
-            train_y[i] = y;
-            train_direction[i] = dir;
-            train_color[i] = color;
+            train_spawn_tick[i] = spawn_tick;
+            train_dest_x[i] = dest_x;
+            train_dest_y[i] = dest_y;
+            train_wait[i] = wait_time;
+            train_priority[i] = priority;
 
             train_id[i] = i;
             train_active[i] = false;
             train_finished[i] = false;
+            train_arrival_tick[i] = -1;
+            
+            // Position will be set when train spawns
+            train_x[i] = -1;
+            train_y[i] = -1;
+            train_direction[i] = 0;
 
             total_trains++;
             continue;
@@ -162,27 +173,20 @@ bool loadLevelFile(string filepath) {
     }
 
     file.close();
-
-    train_count = total_trains;  // FIXED: Set train_count
-
-    cout << "Loaded level: " << filepath << "\n";
-    cout << "Rows=" << grid_rows << " Cols=" << grid_cols << "\n";
-    cout << "Trains loaded=" << total_trains << "\n";
-
     return true;
 }
 
 void initializeLogFiles() {
     ofstream trace("out/trace.csv");
     trace << "Tick,TrainID,X,Y,Direction,State\n";
-    trace.close();  // FIXED: Close file
+    trace.close();
 
     ofstream sw("out/switches.csv");
     sw << "Tick,Switch,State\n";
-    sw.close();  // FIXED: Close file
+    sw.close();
 
     ofstream m("out/metrics.txt");
-    m.close();  // FIXED: Close file
+    m.close();
 }
 
 void logTrainTrace() {
@@ -194,7 +198,7 @@ void logTrainTrace() {
                  << train_direction[i] << ",0\n";
         }
     }
-    file.close();  // FIXED: Close file
+    file.close();
 }
 
 void logSwitchState() {
@@ -205,7 +209,7 @@ void logSwitchState() {
                  << "," << switch_state[s] << "\n";
         }
     }
-    file.close();  // FIXED: Close file
+    file.close();
 }
 
 void writeMetrics() {
@@ -218,5 +222,5 @@ void writeMetrics() {
     file << "Simulation Report\n";
     file << "Total trains: " << total_trains << "\n";
     file << "Delivered: " << delivered << "\n";
-    file.close();  // FIXED: Close file
+    file.close();
 }

@@ -25,10 +25,33 @@ static void sleepMs(int milliseconds) {
     }
 }
 
+static char getTrainSymbol(int direction) {
+    switch(direction) {
+        case DIR_UP: return '^';
+        case DIR_DOWN: return 'v';
+        case DIR_LEFT: return '<';
+        case DIR_RIGHT: return '>';
+        default: return '*';
+    }
+}
+
 static void printAsciiGrid() {
     clearScreen();
     
+    cout << "========================================\n";
     cout << "Tick: " << current_tick << "\n";
+    cout << "Grid: " << grid_rows << " rows x " << grid_cols << " cols\n";
+    cout << "========================================\n";
+    
+    // Count active trains
+    int activeCount = 0;
+    int finishedCount = 0;
+    for (int t = 0; t < total_trains; ++t) {
+        if (train_active[t]) activeCount++;
+        if (train_finished[t]) finishedCount++;
+    }
+    cout << "Active: " << activeCount << " | Finished: " << finishedCount << " / " << total_trains << "\n\n";
+    
     for (int r = 0; r < grid_rows; ++r) {
         for (int c = 0; c < grid_cols; ++c) {
             char ch = grid[r][c];
@@ -36,8 +59,7 @@ static void printAsciiGrid() {
             bool printedTrain = false;
             for (int t = 0; t < total_trains; ++t) {
                 if (train_active[t] && train_x[t] == c && train_y[t] == r) {
-                    if (train_id[t] >= 0 && train_id[t] < 10) cout << (char)('0' + train_id[t]);
-                    else cout << '*';
+                    cout << getTrainSymbol(train_direction[t]);
                     printedTrain = true;
                     break;
                 }
@@ -50,12 +72,21 @@ static void printAsciiGrid() {
         cout << "\n";
     }
 
+    cout << "\n--- Train Details ---\n";
     for (int t = 0; t < total_trains; ++t) {
-        cout << "Train " << t << " id=" << train_id[t]
-             << " active=" << (train_active[t] ? "Y" : "N")
-             << " pos=(" << train_x[t] << "," << train_y[t] << ")"
-             << " spawn=" << train_spawn_tick[t] << "\n";
+        cout << "Train " << t << ": ";
+        if (train_finished[t]) {
+            cout << "FINISHED at tick " << train_arrival_tick[t];
+        } else if (train_active[t]) {
+            cout << "ACTIVE pos=(" << train_x[t] << "," << train_y[t] << ")"
+                 << " dir=" << getTrainSymbol(train_direction[t])
+                 << " dest=(" << train_dest_x[t] << "," << train_dest_y[t] << ")";
+        } else {
+            cout << "INACTIVE (spawns at tick " << train_spawn_tick[t] << ")";
+        }
+        cout << "\n";
     }
+    
     cout << flush;
 }
 
@@ -101,6 +132,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < total_trains; ++i) {
         cout << "Train " << i << " spawnTick=" << train_spawn_tick[i]
              << " pos=(" << train_x[i] << "," << train_y[i] << ") dir=" << train_direction[i]
+             << " dest=(" << train_dest_x[i] << "," << train_dest_y[i] << ")"
              << " color=" << train_color[i] << "\n";
     }
 
@@ -122,7 +154,7 @@ int main(int argc, char** argv) {
                 break;
             }
 
-            sleepMs(500);  // 500ms delay between ticks
+            sleepMs(500);
 
             simulateOneTick();
             ++tickCount;
@@ -130,7 +162,7 @@ int main(int argc, char** argv) {
             printAsciiGrid();
 
             if (isSimulationComplete()) {
-                cout << "Simulation complete at tick " << current_tick << "\n";
+                cout << "\n*** SIMULATION COMPLETE at tick " << current_tick << " ***\n";
                 break;
             }
         }

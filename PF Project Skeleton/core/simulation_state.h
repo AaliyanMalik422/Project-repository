@@ -25,6 +25,7 @@ extern int train_color[MAX_TRAINS];
 extern int train_spawn_tick[MAX_TRAINS];
 extern bool train_active[MAX_TRAINS];
 extern bool train_finished[MAX_TRAINS];
+extern int train_arrival_tick[MAX_TRAINS];
 
 extern int train_next_x[MAX_TRAINS];
 extern int train_next_y[MAX_TRAINS];
