@@ -66,7 +66,7 @@ static void printAsciiGrid() {
             }
             if (printedTrain) continue;
 
-            if (ch == '\0' || ch == ' ' || ch == '.') cout << '.';
+            if (ch == '\0' || ch == ' ' || ch == '.') cout << ' ';  // ✅ Spaces instead of dots
             else cout << ch;
         }
         cout << "\n";
@@ -78,9 +78,10 @@ static void printAsciiGrid() {
         if (train_finished[t]) {
             cout << "FINISHED at tick " << train_arrival_tick[t];
         } else if (train_active[t]) {
-            cout << "ACTIVE pos=(" << train_x[t] << "," << train_y[t] << ")"
+            // ✅ 1-indexed positions (add +1)
+            cout << "ACTIVE pos=(" << (train_x[t] + 1) << "," << (train_y[t] + 1) << ")"
                  << " dir=" << getTrainSymbol(train_direction[t])
-                 << " dest=(" << train_dest_x[t] << "," << train_dest_y[t] << ")";
+                 << " dest=(" << (train_dest_x[t] + 1) << "," << (train_dest_y[t] + 1) << ")";
         } else {
             cout << "INACTIVE (spawns at tick " << train_spawn_tick[t] << ")";
         }
@@ -136,6 +137,7 @@ int main(int argc, char** argv) {
              << " color=" << train_color[i] << "\n";
     }
 
+    // ✅ Initialize output files BEFORE simulation starts
     initializeLogFiles();
 
     initializeSimulation();
@@ -159,6 +161,10 @@ int main(int argc, char** argv) {
             simulateOneTick();
             ++tickCount;
 
+            // ✅ Log every tick's data
+            logTrainTrace();
+            logSwitchState();
+
             printAsciiGrid();
 
             if (isSimulationComplete()) {
@@ -167,8 +173,9 @@ int main(int argc, char** argv) {
             }
         }
 
+        // ✅ Write final metrics
         writeMetrics();             
-        cout << "Metrics written. Exiting.\n";
+        cout << "Metrics written to out/ directory. Exiting.\n";
         return 0;
     }
 
@@ -181,7 +188,8 @@ int main(int argc, char** argv) {
     runApp();    
     cleanupApp();
 
+    // ✅ Write metrics after viewer closes
     writeMetrics();
-    cout << "Viewer closed. Metrics written. Exiting.\n";
+    cout << "Viewer closed. Metrics written to out/ directory. Exiting.\n";
     return 0;
 }
