@@ -1,21 +1,12 @@
 #include "simulation_state.h"
 
-// ============================================================================
-// SIMULATION_STATE.CPP - Global state definitions
-// ============================================================================
-// This file allocates memory for the extern variables declared in the header.
-// ============================================================================
-
-// ----------------------------------------------------------------------------
-// GRID
-// ----------------------------------------------------------------------------
 char grid[MAX_ROWS][MAX_COLS];
 int grid_rows = 0;
 int grid_cols = 0;
 
-// ----------------------------------------------------------------------------
 // TRAINS
-// ----------------------------------------------------------------------------
+int train_count = 0;  // FIXED: Added missing variable (required by app.cpp)
+
 int train_id[MAX_TRAINS];
 int train_x[MAX_TRAINS];
 int train_y[MAX_TRAINS];
@@ -25,7 +16,6 @@ int train_spawn_tick[MAX_TRAINS];
 bool train_active[MAX_TRAINS];
 bool train_finished[MAX_TRAINS];
 
-// For Collision Logic
 int train_next_x[MAX_TRAINS];
 int train_next_y[MAX_TRAINS];
 int train_dest_x[MAX_TRAINS];
@@ -35,9 +25,7 @@ int train_prev_y[MAX_TRAINS];
 
 int total_trains = 0;
 
-// ----------------------------------------------------------------------------
 // SWITCHES
-// ----------------------------------------------------------------------------
 int switch_x[MAX_SWITCHES];
 int switch_y[MAX_SWITCHES];
 int switch_state[MAX_SWITCHES];
@@ -48,74 +36,51 @@ int switch_k_values[MAX_SWITCHES][4];
 int switch_counters[MAX_SWITCHES][4];
 bool switch_flip_queued[MAX_SWITCHES];
 
-// ----------------------------------------------------------------------------
-// SIMULATION PARAMETERS
-// ----------------------------------------------------------------------------
+// SIMULATION
 int current_tick = 0;
 int simulation_seed = 0;
 
-// ----------------------------------------------------------------------------
-// INITIALIZATION FUNCTION
-// ----------------------------------------------------------------------------
 void initializeSimulationState() {
-
-    // -------------------------------------------------------------
-    // 1. Reset Grid Dimensions
-    // -------------------------------------------------------------
     grid_rows = 0;
     grid_cols = 0;
 
-    // -------------------------------------------------------------
-    // 2. Reset Grid Map (fill with dots)
-    // -------------------------------------------------------------
+    // Initialize grid with dots
     for (int r = 0; r < MAX_ROWS; r++) {
         for (int c = 0; c < MAX_COLS; c++) {
             grid[r][c] = '.';
         }
     }
 
-    // -------------------------------------------------------------
-    // 3. Reset Trains
-    // -------------------------------------------------------------
     total_trains = 0;
+    train_count = 0;  // FIXED: Initialize train_count
 
     for (int i = 0; i < MAX_TRAINS; i++) {
-
         train_id[i] = -1;
         train_active[i] = false;
         train_finished[i] = false;
 
-        // Current positions
         train_x[i] = -1;
         train_y[i] = -1;
 
-        // Next positions
         train_next_x[i] = -1;
         train_next_y[i] = -1;
 
-        // Previous positions (NEW — required by two modules)
         train_prev_x[i] = -1;
         train_prev_y[i] = -1;
 
-        // Destination tiles
         train_dest_x[i] = -1;
         train_dest_y[i] = -1;
 
-        // Basic scalar values
         train_direction[i] = 0;
         train_color[i] = 0;
         train_spawn_tick[i] = 0;
     }
 
-    // -------------------------------------------------------------
-    // 4. Reset Switches
-    // -------------------------------------------------------------
     for (int i = 0; i < MAX_SWITCHES; i++) {
-
         switch_active[i] = false;
         switch_flip_queued[i] = false;
 
-        switch_state[i] = 0;  // Default state
+        switch_state[i] = 0;
         switch_x[i] = -1;
         switch_y[i] = -1;
 
@@ -127,9 +92,6 @@ void initializeSimulationState() {
         }
     }
 
-    // -------------------------------------------------------------
-    // 5. Reset simulation globals
-    // -------------------------------------------------------------
     current_tick = 0;
     simulation_seed = 0;
 }
