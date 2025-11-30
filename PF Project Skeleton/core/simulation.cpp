@@ -19,8 +19,7 @@ void initializeSimulation() {
     if (simulation_seed != 0) {
         srand(simulation_seed);
     }
-    // Update signals initially so the map looks correct at start
-    updateSignalLights();
+ 
 }
 
 // ----------------------------------------------------------------------------
@@ -38,25 +37,18 @@ void simulateOneTick() {
     // 2. Route Determination: Compute next tile for every train
     determineAllRoutes();
 
-    // 3. Counter Update: Increment counters if entering switches
-    updateSwitchCounters();
-
-    // 4. Flip Queue: Identify switches that need to flip (at K value)
-    queueSwitchFlips();
 
     // 5. Collision Detection & Movement
     // Detect conflicts (Manhattan priority) and update positions
     detectCollisions();
     moveAllTrains();
 
-    // 6. Apply Deferred Flips: Switches flip AFTER movement
-    applyDeferredFlips();
+
 
     // 7. Arrivals: Check if trains reached destination
     checkArrivals();
 
-    // 8. Update Signals (Visuals/Logic)
-    updateSignalLights();
+
 
     // 9. Logging & Output
     // PDF: "At each tick, print grid state to terminal"

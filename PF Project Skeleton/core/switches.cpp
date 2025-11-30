@@ -1,133 +1,46 @@
 #include "switches.h"
 #include "simulation_state.h"
-#include "grid.h"
-#include "io.h"
 #include <iostream>
 
 using namespace std;
 
-// ============================================================================
-// SWITCHES.CPP - Switch management
-// ============================================================================
+int total_switches=0; 
+// Check if a tile is a switch
+bool isSwitchTile(int x, int y) {
+    if (x < 0 || x >= grid_cols || y < 0 || y >= grid_rows) return false;
+    char tile = grid[y][x];
+    return (tile == 'A' || tile == 'B');
+}
 
-// ----------------------------------------------------------------------------
-// UPDATE SWITCH COUNTERS
-// ----------------------------------------------------------------------------
-// Logic: Loop through all trains. If a train is standing ON a switch,
-// decrement the counter for that train's direction.
-// ----------------------------------------------------------------------------
-void updateSwitchCounters() {
-    for (int t = 0; t < total_trains; t++) {
-        if (!train_active[t]) continue;
-
-        int curX = train_x[t];
-        int curY = train_y[t];
-        int prevX = train_prev_x[t];
-        int prevY = train_prev_y[t];
-
-        // If this is the first tick train appears → treat as entering
-        bool firstTime = (prevX == -1 && prevY == -1);
-
-        for (int s = 0; s < MAX_SWITCHES; s++) {
-            if (!switch_active[s]) continue;
-
-            // Does the train MOVE *into* the switch this tick?
-            if (curX == switch_x[s] && curY == switch_y[s]) {
-
-                bool entered =
-                    firstTime ||
-                    !(prevX == curX && prevY == curY);
-
-                if (entered) {
-                    int dir = train_direction[t];  // 0=UP,1=RIGHT,2=DOWN,3=LEFT
-
-                    if (dir >= 0 && dir < 4 && switch_counters[s][dir] > 0) {
-                        switch_counters[s][dir]--;
-                        // Optional debug:
-                        // cout << "Switch " << char('A'+s)
-                        //      << " decremented on dir=" << dir << "\n";
-                    }
-                }
-            }
+// Get the switch index at position (x, y), return -1 if not a switch
+int getSwitchIndex(int x, int y) {
+    for (int i = 0; i < total_switches; ++i) {
+        if (switch_x[i] == x && switch_y[i] == y) {
+            return i;
         }
     }
+    return -1;
 }
 
-// ----------------------------------------------------------------------------
-// QUEUE SWITCH FLIPS
-// ----------------------------------------------------------------------------
-// Logic: Check all switches. If any counter hits 0, queue a flip
-// and reset the counter back to K.
-// ----------------------------------------------------------------------------
-void queueSwitchFlips() {
-    for (int s = 0; s < MAX_SWITCHES; s++) {
-        if (!switch_active[s]) continue;
-
-        // Check all 4 directions for this switch
-        for (int dir = 0; dir < 4; dir++) {
-            if (switch_counters[s][dir] <= 0) {
-                // Trigger condition met!
-                switch_flip_queued[s] = true;
-
-                // Reset the counter back to the original K value
-                switch_counters[s][dir] = switch_k_values[s][dir];
-            }
-        }
+// Toggle a switch between state A and B
+void toggleSwitch(int switchIndex) {
+    if (switchIndex < 0 || switchIndex >= total_switches) return;
+    
+    // Toggle: 'A' <-> 'B'
+    if (switch_state[switchIndex] == 'A') {
+        switch_state[switchIndex] = 'B';
+    } else {
+        switch_state[switchIndex] = 'A';
     }
+    
+    cout << "Switch " << switchIndex << " toggled to state " << switch_state[switchIndex] << endl;
 }
 
-// ----------------------------------------------------------------------------
-// APPLY DEFERRED FLIPS
-// ----------------------------------------------------------------------------
-// Logic: If a switch is queued to flip, toggle its state (0->1 or 1->0)
-// and clear the queue flag.
-// ----------------------------------------------------------------------------
-void applyDeferredFlips() {
-    for (int s = 0; s < MAX_SWITCHES; s++) {
-        if (switch_active[s] && switch_flip_queued[s]) {
-            // Toggle state: If 0 becomes 1, if 1 becomes 0
-            switch_state[s] = !switch_state[s];
-            
-            // Clear the flag
-            switch_flip_queued[s] = false;
-            
-            // Optional: Debug output
-            // cout << "Switch " << (char)('A' + s) << " flipped to " << switch_state[s] << endl;
-        }
+// Initialize switches (called once at simulation start)
+void initializeSwitches() {
+    for (int i = 0; i < total_switches; ++i) {
+        // Switches start in state 'A' by default
+        switch_state[i] = 'A';
     }
-}
-
-// ----------------------------------------------------------------------------
-// UPDATE SIGNAL LIGHTS
-// ----------------------------------------------------------------------------
-// Placeholder: If you need to change grid colors based on switch state
-// ----------------------------------------------------------------------------
-void updateSignalLights() {
-    // This function can be left empty for now unless you have specific 
-    // requirements to change the map colors based on Traffic Lights.
-}
-
-// ----------------------------------------------------------------------------
-// TOGGLE SWITCH STATE (Manual)
-// ----------------------------------------------------------------------------
-// Manually toggle a switch state.
-// ----------------------------------------------------------------------------
-void toggleSwitchState(int switchIndex) {
-    if (switchIndex >= 0 && switchIndex < MAX_SWITCHES && switch_active[switchIndex]) {
-        switch_state[switchIndex] = !switch_state[switchIndex];
-    }
-}
-
-// ----------------------------------------------------------------------------
-// GET SWITCH STATE FOR DIRECTION
-// ----------------------------------------------------------------------------
-// Returns the state (0 or 1). Currently returns the global state,
-// but can be modified if your switches have different states per direction.
-// ----------------------------------------------------------------------------
-int getSwitchStateForDirection(int switchIndex) {
-
-    if (switchIndex >= 0 && switchIndex < MAX_SWITCHES) {
-        return switch_state[switchIndex];
-    }
-    return 0;
+    cout << "Switches initialized: " << total_switches << " total\n";
 }

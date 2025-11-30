@@ -1,29 +1,29 @@
 #ifndef APP_H
 #define APP_H
 
-// ============================================================================
-// APP.H - SFML application for visualization (NO CLASSES)
-// ============================================================================
-// This module uses only functions and global variables for the SFML frontend.
-// ============================================================================
-
-// ----------------------------------------------------------------------------
-// INITIALIZATION
-// ----------------------------------------------------------------------------
-// Initialize the SFML window and resources
-// Returns true on success, false on failure
 bool initializeApp();
-
-// ----------------------------------------------------------------------------
-// MAIN RUN LOOP
-// ----------------------------------------------------------------------------
-// Run the main application loop
 void runApp();
-
-// ----------------------------------------------------------------------------
-// CLEANUP
-// ----------------------------------------------------------------------------
-// Clean up resources and close window
 void cleanupApp();
 
+// Simulation functions
+void initializeSimulation();
+void simulateOneTick();
+bool isSimulationComplete();
+void logTrainTrace();
+void logSwitchState();
+
+// Train functions
+void spawnTrains();
+void moveTrains();
+void checkDestinations();
+void checkCollisions();
+void updateTrainCounters();
+void checkSafetyViolations();
+
+// Switch helper functions
+bool isSwitchTile(int x, int y);
+int getSwitchIndex(int x, int y);
+void toggleSwitch(int switchIndex);
+void initializeSwitches();
 #endif
+
