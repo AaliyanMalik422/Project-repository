@@ -1,5 +1,7 @@
 # Switchback Rails - Railway Simulation Game
 
+> **Build requirement:** C++17 and SFML 3.x. The graphical viewer uses the SFML 3 event API; SFML 2.x is not supported by this version.
+
 A deterministic railway simulation implementing deferred switch mechanics, dynamic train scheduling, and collision detection.
 
 ## Steps to Start
@@ -7,8 +9,10 @@ A deterministic railway simulation implementing deferred switch mechanics, dynam
 Follow these steps to set up and run the project:
 
 1. **Install Required Libraries**
+   Install a C++17 compiler, GNU Make, and SFML 3 development libraries. The supplied `libraries.sh` installs the distribution's `libsfml-dev`; verify that its version is SFML 3.x before building.
    ```bash
    bash libraries.sh
+   pkg-config --modversion sfml-graphics
    ```
 
 2. **Clean Previous Build Files**
@@ -18,6 +22,7 @@ Follow these steps to set up and run the project:
 
 3. **Build the Project**
    ```bash
+   make clean
    make
    ```
 
@@ -55,6 +60,20 @@ make clean      # Clean build files
 ./switchback_rails data/levels/simple_test.lvl
 ./switchback_rails data/levels/full_network.lvl
 ./switchback_rails data/levels/complex_network.lvl
+```
+
+## Graphical Viewer
+
+Launch the SFML 3 viewer with:
+
+```bash
+./switchback_rails data/levels/easy_level.lvl --view
+```
+
+Run headless with an optional maximum tick count:
+
+```bash
+./switchback_rails data/levels/easy_level.lvl 200
 ```
 
 ## Controls
