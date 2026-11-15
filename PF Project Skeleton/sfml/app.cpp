@@ -7,10 +7,13 @@
 
 #include <SFML/Graphics.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -18,7 +21,8 @@ sf::RenderWindow window;
 sf::Font font;
 sf::View camera;
 
-const float WORLD_TILE_SIZE = 48.f;
+static constexpr float WORLD_TILE_SIZE = 48.f;
+static constexpr float PI = 3.14159265358979323846f;
 bool isPaused = false;
 
 static bool fontLoaded = false;
@@ -31,21 +35,176 @@ static int boardMinY = 0;
 static int boardMaxX = 0;
 static int boardMaxY = 0;
 
-static const sf::Color BACKGROUND(15, 22, 31);
-static const sf::Color BOARD_DARK(29, 40, 51);
-static const sf::Color BOARD_LIGHT(32, 44, 56);
-static const sf::Color GRID_LINE(43, 57, 69);
-static const sf::Color TRACK_BALLAST(43, 49, 56);
-static const sf::Color TRACK_SLEEPER(112, 75, 48);
-static const sf::Color TRACK_RAIL(190, 202, 210);
-static const sf::Color TRACK_RAIL_DARK(117, 133, 145);
-static const sf::Color SAFETY_RAIL(87, 211, 157);
-static const sf::Color SOURCE_BLUE(40, 135, 218);
-static const sf::Color DEST_GREEN(40, 169, 119);
-static const sf::Color SWITCH_GOLD(242, 181, 72);
+static sf::Texture trackStraightTexture;
+static sf::Texture trackVerticalTexture;
+static sf::Texture trackCurveUpTexture;
+static sf::Texture trackCurveDownTexture;
+static sf::Texture trackCrossTexture;
+static sf::Texture switchATexture;
+static sf::Texture switchBTexture;
+static sf::Texture sourceTexture;
+static sf::Texture destinationTexture;
+static sf::Texture safetyTexture;
+static sf::Texture trainTextures[4];
+
+static const sf::Color BACKGROUND(28, 32, 38);
+static const sf::Color PAPER(250, 250, 247);
+static const sf::Color PAPER_GRID(222, 226, 228);
+static const sf::Color PAPER_BORDER(190, 196, 201);
+static const sf::Color HUD_BACKGROUND(18, 24, 31, 225);
+static const sf::Color HUD_BORDER(91, 108, 123, 210);
+
+struct CropRect {
+    unsigned int x;
+    unsigned int y;
+    unsigned int width;
+    unsigned int height;
+};
 
 static bool isVisibleTile(char tile) {
-    return tile != ' ' && tile != '\t' && tile != '\0';
+    return tile != ' ' && tile != '\t' && tile != '\0' && tile != '.';
+}
+
+static bool isPaperBackground(const sf::Color &pixel) {
+    if (pixel.a == 0) return true;
+
+    const unsigned int minimum = min({pixel.r, pixel.g, pixel.b});
+    const unsigned int maximum = max({pixel.r, pixel.g, pixel.b});
+    return minimum >= 190 && (maximum - minimum) <= 48;
+}
+
+static bool loadCroppedSprite(sf::Texture &texture,
+                              const string &path,
+                              CropRect crop) {
+    sf::Image source;
+    if (!source.loadFromFile(path)) {
+        cerr << "Warning: failed to load sprite: " << path << "\n";
+        return false;
+    }
+
+    const sf::Vector2u sourceSize = source.getSize();
+    if (crop.x >= sourceSize.x || crop.y >= sourceSize.y) {
+        cerr << "Warning: invalid crop for sprite: " << path << "\n";
+        return false;
+    }
+
+    crop.width = min(crop.width, sourceSize.x - crop.x);
+    crop.height = min(crop.height, sourceSize.y - crop.y);
+    if (crop.width == 0 || crop.height == 0) return false;
+
+    sf::Image image({crop.width, crop.height}, sf::Color::Transparent);
+    for (unsigned int y = 0; y < crop.height; ++y) {
+        for (unsigned int x = 0; x < crop.width; ++x) {
+            image.setPixel(
+                {x, y},
+                source.getPixel({crop.x + x, crop.y + y})
+            );
+        }
+    }
+
+    const size_t pixelCount =
+        static_cast<size_t>(crop.width) * static_cast<size_t>(crop.height);
+    vector<uint8_t> visited(pixelCount, 0);
+    vector<size_t> queue;
+    queue.reserve(pixelCount / 2);
+
+    auto enqueueBackground = [&](unsigned int x, unsigned int y) {
+        const size_t index =
+            static_cast<size_t>(y) * crop.width + static_cast<size_t>(x);
+        if (visited[index]) return;
+        visited[index] = 1;
+
+        const sf::Color pixel = image.getPixel({x, y});
+        if (isPaperBackground(pixel)) {
+            image.setPixel({x, y}, sf::Color::Transparent);
+            queue.push_back(index);
+        }
+    };
+
+    for (unsigned int x = 0; x < crop.width; ++x) {
+        enqueueBackground(x, 0);
+        enqueueBackground(x, crop.height - 1);
+    }
+    for (unsigned int y = 0; y < crop.height; ++y) {
+        enqueueBackground(0, y);
+        enqueueBackground(crop.width - 1, y);
+    }
+
+    size_t head = 0;
+    while (head < queue.size()) {
+        const size_t index = queue[head++];
+        const unsigned int x = static_cast<unsigned int>(index % crop.width);
+        const unsigned int y = static_cast<unsigned int>(index / crop.width);
+
+        if (x > 0) enqueueBackground(x - 1, y);
+        if (x + 1 < crop.width) enqueueBackground(x + 1, y);
+        if (y > 0) enqueueBackground(x, y - 1);
+        if (y + 1 < crop.height) enqueueBackground(x, y + 1);
+    }
+
+    if (!texture.loadFromImage(image)) {
+        cerr << "Warning: failed to create sprite texture: " << path << "\n";
+        return false;
+    }
+    texture.setSmooth(true);
+    return true;
+}
+
+static void loadViewerFont() {
+    const string candidates[] = {
+        "assets/fonts/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "C:/Windows/Fonts/arial.ttf"
+    };
+
+    for (const string &path : candidates) {
+        if (font.openFromFile(path)) {
+            fontLoaded = true;
+            return;
+        }
+    }
+
+    cerr << "Warning: no viewer font found; HUD text disabled.\n";
+}
+
+static bool loadAllSprites() {
+    bool ok = true;
+
+    ok &= loadCroppedSprite(trackStraightTexture, "Sprites/track_horizontal.png",
+                            {12, 18, 304, 103});
+    ok &= loadCroppedSprite(trackVerticalTexture, "Sprites/track_vertical.png",
+                            {9, 12, 132, 222});
+    ok &= loadCroppedSprite(trackCurveUpTexture, "Sprites/track_diagonal_up.png",
+                            {8, 8, 264, 265});
+    ok &= loadCroppedSprite(trackCurveDownTexture, "Sprites/track_diagonal_down.png",
+                            {8, 8, 266, 260});
+    ok &= loadCroppedSprite(trackCrossTexture, "Sprites/track_cross.png",
+                            {9, 16, 241, 278});
+
+    ok &= loadCroppedSprite(switchATexture, "Sprites/switch_A.png",
+                            {34, 10, 302, 298});
+    ok &= loadCroppedSprite(switchBTexture, "Sprites/switch_B.png",
+                            {30, 10, 322, 306});
+
+    ok &= loadCroppedSprite(sourceTexture, "Sprites/tile_source_blue.png",
+                            {10, 32, 165, 165});
+    ok &= loadCroppedSprite(destinationTexture, "Sprites/tile_destination.png",
+                            {26, 31, 164, 164});
+    ok &= loadCroppedSprite(safetyTexture, "Sprites/tile_safety.png",
+                            {20, 8, 160, 160});
+
+    ok &= loadCroppedSprite(trainTextures[DIR_UP], "Sprites/train_up.png",
+                            {37, 53, 339, 229});
+    ok &= loadCroppedSprite(trainTextures[DIR_RIGHT], "Sprites/train_right.png",
+                            {28, 51, 321, 228});
+    ok &= loadCroppedSprite(trainTextures[DIR_DOWN], "Sprites/train_down.png",
+                            {14, 44, 324, 229});
+    ok &= loadCroppedSprite(trainTextures[DIR_LEFT], "Sprites/train_left.png",
+                            {42, 44, 320, 230});
+
+    return ok;
 }
 
 static void findBoardBounds() {
@@ -77,17 +236,16 @@ static void frameBoard() {
     const sf::Vector2u windowSize = window.getSize();
     const float aspect = windowSize.y == 0
         ? 16.f / 9.f
-        : static_cast<float>(windowSize.x) / static_cast<float>(windowSize.y);
+        : static_cast<float>(windowSize.x) /
+          static_cast<float>(windowSize.y);
 
-    const float boardWidth = (boardMaxX - boardMinX + 1) * WORLD_TILE_SIZE;
-    const float boardHeight = (boardMaxY - boardMinY + 1) * WORLD_TILE_SIZE;
-    const float margin = WORLD_TILE_SIZE * 1.15f;
+    const float margin = WORLD_TILE_SIZE * 0.8f;
+    const float boardWidth =
+        (boardMaxX - boardMinX + 1) * WORLD_TILE_SIZE + margin * 2.f;
+    const float boardHeight =
+        (boardMaxY - boardMinY + 1) * WORLD_TILE_SIZE + margin * 2.f;
 
-    // Fit the actual map, not the often much larger ROWS/COLS allocation.
-    const float viewWidth = max(
-        (boardWidth + margin * 2.f) / 0.84f,
-        (boardHeight + margin * 2.f) * aspect / 0.84f
-    );
+    const float viewWidth = max(boardWidth, boardHeight * aspect) / 0.88f;
 
     camera = window.getDefaultView();
     camera.setSize({viewWidth, viewWidth / aspect});
@@ -95,181 +253,79 @@ static void frameBoard() {
         (boardMinX + boardMaxX + 1) * WORLD_TILE_SIZE * 0.5f,
         (boardMinY + boardMaxY + 1) * WORLD_TILE_SIZE * 0.5f
     });
+
     window.setView(camera);
     zoomLevel = 1.f;
 }
 
-static void drawCenteredBar(float centerX, float centerY,
-                            float length, float thickness,
-                            float rotation, const sf::Color &color) {
-    sf::RectangleShape bar({length, thickness});
-    bar.setOrigin({length * 0.5f, thickness * 0.5f});
-    bar.setPosition({centerX, centerY});
-    bar.setRotation(sf::degrees(rotation));
-    bar.setFillColor(color);
-    window.draw(bar);
-}
+static void drawPaperBoard() {
+    const float left = (boardMinX - 0.5f) * WORLD_TILE_SIZE;
+    const float top = (boardMinY - 0.5f) * WORLD_TILE_SIZE;
+    const float width = (boardMaxX - boardMinX + 2.f) * WORLD_TILE_SIZE;
+    const float height = (boardMaxY - boardMinY + 2.f) * WORLD_TILE_SIZE;
 
-static sf::Vector2f pointAlongTrack(float centerX, float centerY,
-                                    float angleRadians, float along,
-                                    float across = 0.f) {
-    const float dx = std::cos(angleRadians);
-    const float dy = std::sin(angleRadians);
-    return {
-        centerX + dx * along - dy * across,
-        centerY + dy * along + dx * across
-    };
-}
+    sf::RectangleShape paper({width, height});
+    paper.setPosition({left, top});
+    paper.setFillColor(PAPER);
+    paper.setOutlineThickness(1.5f);
+    paper.setOutlineColor(PAPER_BORDER);
+    window.draw(paper);
 
-static void drawTrackLine(float centerX, float centerY, float angleDegrees,
-                          bool safety = false) {
-    const float angle = angleDegrees * 3.14159265358979323846f / 180.f;
-    const float lineLength = WORLD_TILE_SIZE + 2.f;
-
-    // A dark bed keeps adjoining pieces visually connected.
-    drawCenteredBar(centerX, centerY, lineLength, 15.f,
-                     angleDegrees, TRACK_BALLAST);
-
-    // Wooden sleepers sit perpendicular to the rails.
-    for (float along = -18.f; along <= 18.f; along += 12.f) {
-        const sf::Vector2f p = pointAlongTrack(
-            centerX, centerY, angle, along
-        );
-        drawCenteredBar(p.x, p.y, 25.f, 4.5f,
-                        angleDegrees + 90.f, TRACK_SLEEPER);
+    sf::VertexArray gridLines(sf::PrimitiveType::Lines);
+    for (int col = boardMinX; col <= boardMaxX + 1; ++col) {
+        const float x = col * WORLD_TILE_SIZE;
+        gridLines.append(sf::Vertex({x, top}, PAPER_GRID));
+        gridLines.append(sf::Vertex({x, top + height}, PAPER_GRID));
     }
-
-    const sf::Color railColor = safety ? SAFETY_RAIL : TRACK_RAIL;
-    const float railOffset = 6.2f;
-    for (float side : {-railOffset, railOffset}) {
-        const sf::Vector2f p = pointAlongTrack(
-            centerX, centerY, angle, 0.f, side
-        );
-        drawCenteredBar(p.x, p.y, lineLength, 2.8f,
-                        angleDegrees, railColor);
+    for (int row = boardMinY; row <= boardMaxY + 1; ++row) {
+        const float y = row * WORLD_TILE_SIZE;
+        gridLines.append(sf::Vertex({left, y}, PAPER_GRID));
+        gridLines.append(sf::Vertex({left + width, y}, PAPER_GRID));
     }
-
-    if (safety) {
-        sf::CircleShape marker(3.3f);
-        marker.setOrigin({3.3f, 3.3f});
-        marker.setPosition({centerX, centerY});
-        marker.setFillColor(SAFETY_RAIL);
-        window.draw(marker);
-    }
+    window.draw(gridLines);
 }
 
-static void drawCellBackground(int col, int row) {
-    const float x = col * WORLD_TILE_SIZE;
-    const float y = row * WORLD_TILE_SIZE;
+static void drawSpriteFit(const sf::Texture &texture,
+                          float centerX, float centerY,
+                          float maxWidth, float maxHeight) {
+    const sf::Vector2u size = texture.getSize();
+    if (size.x == 0 || size.y == 0) return;
 
-    sf::RectangleShape cell({WORLD_TILE_SIZE - 1.f, WORLD_TILE_SIZE - 1.f});
-    cell.setPosition({x + 0.5f, y + 0.5f});
-    cell.setFillColor(((col + row) % 2 == 0) ? BOARD_DARK : BOARD_LIGHT);
-    cell.setOutlineThickness(0.5f);
-    cell.setOutlineColor(GRID_LINE);
-    window.draw(cell);
+    const float scale = min(maxWidth / static_cast<float>(size.x),
+                            maxHeight / static_cast<float>(size.y));
+    sf::Sprite sprite(texture);
+    sprite.setOrigin({
+        static_cast<float>(size.x) * 0.5f,
+        static_cast<float>(size.y) * 0.5f
+    });
+    sprite.setPosition({centerX, centerY});
+    sprite.setScale({scale, scale});
+    window.draw(sprite);
 }
 
-static void drawSource(float centerX, float centerY) {
-    sf::CircleShape outer(15.f);
-    outer.setOrigin({15.f, 15.f});
-    outer.setPosition({centerX, centerY});
-    outer.setFillColor(SOURCE_BLUE);
-    outer.setOutlineThickness(2.f);
-    outer.setOutlineColor(sf::Color(190, 225, 250));
-    window.draw(outer);
+static void drawSpriteFill(const sf::Texture &texture,
+                           float centerX, float centerY,
+                           float width, float height) {
+    const sf::Vector2u size = texture.getSize();
+    if (size.x == 0 || size.y == 0) return;
 
-    sf::CircleShape inner(5.f);
-    inner.setOrigin({5.f, 5.f});
-    inner.setPosition({centerX, centerY});
-    inner.setFillColor(sf::Color::White);
-    window.draw(inner);
-}
-
-static void drawDestination(float centerX, float centerY) {
-    sf::CircleShape outer(15.f);
-    outer.setOrigin({15.f, 15.f});
-    outer.setPosition({centerX, centerY});
-    outer.setFillColor(DEST_GREEN);
-    outer.setOutlineThickness(2.f);
-    outer.setOutlineColor(sf::Color(190, 245, 220));
-    window.draw(outer);
-
-    sf::CircleShape ring(8.f);
-    ring.setOrigin({8.f, 8.f});
-    ring.setPosition({centerX, centerY});
-    ring.setFillColor(sf::Color::Transparent);
-    ring.setOutlineThickness(2.f);
-    ring.setOutlineColor(sf::Color::White);
-    window.draw(ring);
-
-    sf::CircleShape center(3.f);
-    center.setOrigin({3.f, 3.f});
-    center.setPosition({centerX, centerY});
-    center.setFillColor(sf::Color::White);
-    window.draw(center);
-}
-
-static bool hasTrackNeighbor(int col, int row) {
-    return isInBounds(col, row) && isTrackTile(col, row);
-}
-
-static void drawSwitch(int col, int row, float centerX, float centerY) {
-    const bool horizontal =
-        hasTrackNeighbor(col - 1, row) || hasTrackNeighbor(col + 1, row);
-    const bool vertical =
-        hasTrackNeighbor(col, row - 1) || hasTrackNeighbor(col, row + 1);
-
-    if (horizontal || !vertical)
-        drawTrackLine(centerX, centerY, 0.f);
-    if (vertical)
-        drawTrackLine(centerX, centerY, 90.f);
-
-    const int index = getSwitchIndex(col, row);
-    const bool active = index >= 0 && switch_state[index] == 1;
-
-    sf::CircleShape indicator(6.5f);
-    indicator.setOrigin({6.5f, 6.5f});
-    indicator.setPosition({centerX, centerY});
-    indicator.setFillColor(active ? SWITCH_GOLD : sf::Color(83, 177, 205));
-    indicator.setOutlineThickness(2.f);
-    indicator.setOutlineColor(sf::Color(20, 29, 37));
-    window.draw(indicator);
-}
-
-static void drawTrain(int x, int y, int direction) {
-    const float centerX = (x + 0.5f) * WORLD_TILE_SIZE;
-    const float centerY = (y + 0.5f) * WORLD_TILE_SIZE;
-    const bool vertical = direction == DIR_UP || direction == DIR_DOWN;
-    const float width = vertical ? 15.f : 25.f;
-    const float height = vertical ? 25.f : 15.f;
-
-    sf::RectangleShape body({width, height});
-    body.setOrigin({width * 0.5f, height * 0.5f});
-    body.setPosition({centerX, centerY});
-    body.setFillColor(sf::Color(48, 105, 170));
-    body.setOutlineThickness(2.f);
-    body.setOutlineColor(sf::Color(220, 235, 248));
-    window.draw(body);
-
-    float noseX = 0.f;
-    float noseY = 0.f;
-    if (direction == DIR_UP) noseY = -9.f;
-    else if (direction == DIR_RIGHT) noseX = 9.f;
-    else if (direction == DIR_DOWN) noseY = 9.f;
-    else if (direction == DIR_LEFT) noseX = -9.f;
-
-    sf::CircleShape nose(3.5f);
-    nose.setOrigin({3.5f, 3.5f});
-    nose.setPosition({centerX + noseX, centerY + noseY});
-    nose.setFillColor(sf::Color(255, 224, 135));
-    window.draw(nose);
+    sf::Sprite sprite(texture);
+    sprite.setOrigin({
+        static_cast<float>(size.x) * 0.5f,
+        static_cast<float>(size.y) * 0.5f
+    });
+    sprite.setPosition({centerX, centerY});
+    sprite.setScale({
+        width / static_cast<float>(size.x),
+        height / static_cast<float>(size.y)
+    });
+    window.draw(sprite);
 }
 
 static void handleMouseClick(sf::Vector2i pixel, sf::Mouse::Button button) {
     const sf::Vector2f world = window.mapPixelToCoords(pixel, camera);
-    const int col = static_cast<int>(std::floor(world.x / WORLD_TILE_SIZE));
-    const int row = static_cast<int>(std::floor(world.y / WORLD_TILE_SIZE));
+    const int col = static_cast<int>(floor(world.x / WORLD_TILE_SIZE));
+    const int row = static_cast<int>(floor(world.y / WORLD_TILE_SIZE));
 
     if (!isInBounds(col, row)) return;
 
@@ -288,31 +344,16 @@ static void handleMouseClick(sf::Vector2i pixel, sf::Mouse::Button button) {
     }
 }
 
-static void loadViewerFont() {
-    const string candidates[] = {
-        "assets/fonts/Arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-        "C:/Windows/Fonts/arial.ttf"
-    };
-
-    for (const string &path : candidates) {
-        if (font.openFromFile(path)) {
-            fontLoaded = true;
-            return;
-        }
-    }
-
-    cerr << "Warning: no viewer font found; HUD text disabled.\n";
-}
-
 bool initializeApp() {
     window.create(sf::VideoMode({1280u, 800u}), "Switchback Rails Viewer");
     if (!window.isOpen()) return false;
     window.setFramerateLimit(60);
 
     loadViewerFont();
+    if (!loadAllSprites()) {
+        cerr << "One or more viewer sprites could not be loaded.\n";
+    }
+
     frameBoard();
     return true;
 }
@@ -349,16 +390,20 @@ void runApp() {
                     handleMouseClick(pressed->position, pressed->button);
                 }
             } else if (const auto *released = event->getIf<sf::Event::MouseButtonReleased>()) {
-                if (released->button == sf::Mouse::Button::Middle) dragging = false;
+                if (released->button == sf::Mouse::Button::Middle) {
+                    dragging = false;
+                }
             } else if (const auto *moved = event->getIf<sf::Event::MouseMoved>()) {
                 if (dragging) {
                     const sf::Vector2i current(moved->position);
                     const sf::Vector2i delta = current - lastMousePosition;
                     const sf::Vector2u size = window.getSize();
+
                     const float worldPerPixelX = camera.getSize().x /
                         static_cast<float>(max(1u, size.x));
                     const float worldPerPixelY = camera.getSize().y /
                         static_cast<float>(max(1u, size.y));
+
                     camera.move({
                         -static_cast<float>(delta.x) * worldPerPixelX,
                         -static_cast<float>(delta.y) * worldPerPixelY
@@ -371,6 +416,13 @@ void runApp() {
                     camera.zoom(factor);
                     zoomLevel *= factor;
                 }
+            } else if (event->is<sf::Event::Resized>()) {
+                const sf::Vector2u size = window.getSize();
+                const float aspect = static_cast<float>(size.x) /
+                    static_cast<float>(max(1u, size.y));
+                const sf::Vector2f oldSize = camera.getSize();
+                const float newWidth = max(oldSize.x, oldSize.y * aspect);
+                camera.setSize({newWidth, newWidth / aspect});
             }
         }
 
@@ -382,6 +434,7 @@ void runApp() {
                 simulateOneTick();
                 logTrainTrace();
                 logSwitchState();
+
                 if (isSimulationComplete()) {
                     isPaused = true;
                     cout << "Simulation complete at tick " << current_tick << "\n";
@@ -392,13 +445,7 @@ void runApp() {
 
         window.clear(BACKGROUND);
         window.setView(camera);
-
-        // Draw a clean, continuous board over the occupied map bounds.
-        for (int row = boardMinY; row <= boardMaxY; ++row) {
-            for (int col = boardMinX; col <= boardMaxX; ++col) {
-                drawCellBackground(col, row);
-            }
-        }
+        drawPaperBoard();
 
         for (int row = 0; row < grid_rows; ++row) {
             for (int col = 0; col < grid_cols; ++col) {
@@ -409,24 +456,43 @@ void runApp() {
                 const float centerY = (row + 0.5f) * WORLD_TILE_SIZE;
 
                 if (tile == '-') {
-                    drawTrackLine(centerX, centerY, 0.f);
+                    drawSpriteFit(trackStraightTexture, centerX, centerY,
+                                  WORLD_TILE_SIZE, WORLD_TILE_SIZE * 0.76f);
                 } else if (tile == '=') {
-                    drawTrackLine(centerX, centerY, 0.f, true);
+                    drawSpriteFill(safetyTexture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.94f,
+                                   WORLD_TILE_SIZE * 0.94f);
                 } else if (tile == '|') {
-                    drawTrackLine(centerX, centerY, 90.f);
+                    drawSpriteFit(trackVerticalTexture, centerX, centerY,
+                                  WORLD_TILE_SIZE * 0.76f, WORLD_TILE_SIZE);
                 } else if (tile == '+') {
-                    drawTrackLine(centerX, centerY, 0.f);
-                    drawTrackLine(centerX, centerY, 90.f);
+                    drawSpriteFill(trackCrossTexture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.98f,
+                                   WORLD_TILE_SIZE * 0.98f);
                 } else if (tile == '/') {
-                    drawTrackLine(centerX, centerY, -45.f);
+                    drawSpriteFill(trackCurveUpTexture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.98f,
+                                   WORLD_TILE_SIZE * 0.98f);
                 } else if (tile == '\\') {
-                    drawTrackLine(centerX, centerY, 45.f);
+                    drawSpriteFill(trackCurveDownTexture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.98f,
+                                   WORLD_TILE_SIZE * 0.98f);
                 } else if (isSwitchTile(col, row)) {
-                    drawSwitch(col, row, centerX, centerY);
+                    const int index = getSwitchIndex(col, row);
+                    const sf::Texture &texture =
+                        (index >= 0 && switch_state[index] == 1)
+                        ? switchBTexture : switchATexture;
+                    drawSpriteFill(texture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.98f,
+                                   WORLD_TILE_SIZE * 0.98f);
                 } else if (tile == 'S') {
-                    drawSource(centerX, centerY);
+                    drawSpriteFill(sourceTexture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.94f,
+                                   WORLD_TILE_SIZE * 0.94f);
                 } else if (tile == 'D') {
-                    drawDestination(centerX, centerY);
+                    drawSpriteFill(destinationTexture, centerX, centerY,
+                                   WORLD_TILE_SIZE * 0.94f,
+                                   WORLD_TILE_SIZE * 0.94f);
                 }
             }
         }
@@ -435,32 +501,38 @@ void runApp() {
             if (!train_active[i]) continue;
             const int direction = train_direction[i];
             if (direction < DIR_UP || direction > DIR_LEFT) continue;
-            drawTrain(train_x[i], train_y[i], direction);
+
+            drawSpriteFit(
+                trainTextures[direction],
+                (train_x[i] + 0.5f) * WORLD_TILE_SIZE,
+                (train_y[i] + 0.5f) * WORLD_TILE_SIZE,
+                WORLD_TILE_SIZE * 0.96f,
+                WORLD_TILE_SIZE * 0.78f
+            );
         }
 
-        // Keep the HUD in screen space so it remains readable while zooming.
         if (fontLoaded) {
             window.setView(window.getDefaultView());
 
-            sf::RectangleShape panel({610.f, 72.f});
-            panel.setPosition({16.f, 16.f});
-            panel.setFillColor(sf::Color(9, 15, 22, 218));
+            sf::RectangleShape panel({540.f, 68.f});
+            panel.setPosition({14.f, 14.f});
+            panel.setFillColor(HUD_BACKGROUND);
             panel.setOutlineThickness(1.f);
-            panel.setOutlineColor(sf::Color(71, 91, 108, 220));
+            panel.setOutlineColor(HUD_BORDER);
             window.draw(panel);
 
-            sf::Text title(font, "SWITCHBACK RAILS", 15);
-            title.setPosition({30.f, 25.f});
-            title.setFillColor(sf::Color(225, 236, 244));
+            sf::Text title(font, "Switchback Rails", 16);
+            title.setPosition({28.f, 22.f});
+            title.setFillColor(sf::Color(245, 247, 249));
             window.draw(title);
 
             const string status =
                 "Tick " + to_string(current_tick) +
                 (isPaused ? "  |  PAUSED" : "  |  RUNNING") +
-                "     SPACE pause  . step  HOME reset view";
+                "     Space: pause  .: step  Home: reset view";
             sf::Text controls(font, status, 12);
-            controls.setPosition({30.f, 50.f});
-            controls.setFillColor(sf::Color(165, 185, 199));
+            controls.setPosition({28.f, 47.f});
+            controls.setFillColor(sf::Color(190, 202, 212));
             window.draw(controls);
         }
 
