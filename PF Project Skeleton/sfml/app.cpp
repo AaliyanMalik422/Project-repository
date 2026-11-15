@@ -1,39 +1,36 @@
 #include "app.h"
 #include "../core/simulation_state.h"
+#include "../core/grid.h"
+#include "../core/switches.h"
 #include <SFML/Graphics.hpp>
 #include <iostream>
 #include <cmath>
 
 using namespace std;
 
-// SFML objects
 sf::RenderWindow window;
 sf::Font font;
 
-// Textures for different track types
 sf::Texture trackStraightTexture;
-sf::Texture trackCurveTexture;
+sf::Texture trackCurveDownTexture;
+sf::Texture trackCurveUpTexture;
 sf::Texture trackCrossTexture;
 sf::Texture switchATexture;
 sf::Texture switchBTexture;
 sf::Texture sourceTexture;
 sf::Texture destTexture;
-
-// Train textures (4 directions)
+sf::Texture safetyTexture;
 sf::Texture trainTextures[4];
 
-// Camera/view
 sf::View camera;
-float cameraX = 0.f, cameraY = 0.f;
 float zoomLevel = 1.0f;
-
-// Tile rendering size
 const float TILE_SIZE = 64.f;
-
-// Pause state
+const float WORLD_TILE_SIZE = TILE_SIZE * 0.5f;
 bool isPaused = false;
+static bool fontLoaded = false;
+static bool dragging = false;
+static sf::Vector2i lastMousePosition;
 
-// Helper to load a texture
 static bool loadTex(sf::Texture &tex, const string &path) {
     if (!tex.loadFromFile(path)) {
         cerr << "Warning: failed to load texture: " << path << "\n";
@@ -43,181 +40,203 @@ static bool loadTex(sf::Texture &tex, const string &path) {
 }
 
 bool initializeApp() {
-    // Create window
     window.create(sf::VideoMode(1280, 720), "Switchback Rails Viewer");
+    if (!window.isOpen()) return false;
     window.setFramerateLimit(60);
 
-    // Load font (optional)
-    if (!font.loadFromFile("assets/fonts/Arial.ttf")) {
-        cerr << "Warning: could not load font. Text may not display.\n";
+    fontLoaded = font.loadFromFile("assets/fonts/Arial.ttf");
+    if (!fontLoaded) {
+        cerr << "Warning: assets/fonts/Arial.ttf not found; text overlay disabled.\n";
     }
 
-    // Load track textures
     loadTex(trackStraightTexture, "Sprites/track_horizontal.png");
-    loadTex(trackCurveTexture, "Sprites/track_diagonal_down.png");
+    loadTex(trackCurveDownTexture, "Sprites/track_diagonal_down.png");
+    loadTex(trackCurveUpTexture, "Sprites/track_diagonal_up.png");
     loadTex(trackCrossTexture, "Sprites/track_cross.png");
     loadTex(switchATexture, "Sprites/switch_A.png");
     loadTex(switchBTexture, "Sprites/switch_B.png");
     loadTex(sourceTexture, "Sprites/tile_source_blue.png");
     loadTex(destTexture, "Sprites/tile_destination.png");
+    loadTex(safetyTexture, "Sprites/tile_safety.png");
 
-    // Load train textures (4 directions: UP=0, DOWN=1, LEFT=2, RIGHT=3)
-    loadTex(trainTextures[0], "Sprites/train_up.png");
-    loadTex(trainTextures[1], "Sprites/train_down.png");
-    loadTex(trainTextures[2], "Sprites/train_left.png");
-    loadTex(trainTextures[3], "Sprites/train_right.png");
+    loadTex(trainTextures[DIR_UP], "Sprites/train_up.png");
+    loadTex(trainTextures[DIR_RIGHT], "Sprites/train_right.png");
+    loadTex(trainTextures[DIR_DOWN], "Sprites/train_down.png");
+    loadTex(trainTextures[DIR_LEFT], "Sprites/train_left.png");
 
-    // Initialize camera centered on grid
-    float gridPixelWidth = grid_cols * TILE_SIZE * 0.5f;
-    float gridPixelHeight = grid_rows * TILE_SIZE * 0.5f;
     camera = window.getDefaultView();
-    camera.setCenter(gridPixelWidth / 2.f, gridPixelHeight / 2.f);
+    camera.setCenter(grid_cols * WORLD_TILE_SIZE / 2.f,
+                     grid_rows * WORLD_TILE_SIZE / 2.f);
     window.setView(camera);
-
     return true;
+}
+
+static void handleMouseClick(const sf::Event::MouseButtonEvent &mouseEvent) {
+    const sf::Vector2f world = window.mapPixelToCoords(
+        sf::Vector2i(mouseEvent.x, mouseEvent.y), camera);
+    const int col = static_cast<int>(floor(world.x / WORLD_TILE_SIZE));
+    const int row = static_cast<int>(floor(world.y / WORLD_TILE_SIZE));
+
+    if (!isInBounds(col, row)) return;
+
+    if (mouseEvent.button == sf::Mouse::Left) {
+        if (toggleSafetyTile(col, row)) {
+            cout << "Safety tile updated at (" << col << ", " << row << ")\n";
+        }
+    } else if (mouseEvent.button == sf::Mouse::Right) {
+        if (isSwitchTile(col, row)) {
+            const int switchIndex = getSwitchIndex(col, row);
+            if (switchIndex >= 0) {
+                toggleSwitch(switchIndex);
+                cout << "Switch " << grid[row][col] << " toggled.\n";
+            }
+        }
+    }
 }
 
 void runApp() {
     sf::Clock clock;
     float timeAccumulator = 0.f;
-    const float TICK_INTERVAL = 0.5f; // 0.5 seconds per tick
+    const float TICK_INTERVAL = 0.5f;
 
     while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 window.close();
-            }
-            if (event.type == sf::Event::KeyPressed) {
+            } else if (event.type == sf::Event::KeyPressed) {
                 if (event.key.code == sf::Keyboard::Escape) {
                     window.close();
-                }
-                if (event.key.code == sf::Keyboard::Space) {
+                } else if (event.key.code == sf::Keyboard::Space) {
                     isPaused = !isPaused;
-                    cout << (isPaused ? "PAUSED" : "RESUMED") << "\n";
-                }
-                // Manual step with '.' key
-                if (event.key.code == sf::Keyboard::Period) {
+                } else if (event.key.code == sf::Keyboard::Period) {
                     simulateOneTick();
                     logTrainTrace();
                     logSwitchState();
-                    cout << "Manual step: tick " << current_tick << "\n";
+                }
+            } else if (event.type == sf::Event::MouseButtonPressed) {
+                if (event.mouseButton.button == sf::Mouse::Middle) {
+                    dragging = true;
+                    lastMousePosition = sf::Mouse::getPosition(window);
+                } else if (event.mouseButton.button == sf::Mouse::Left ||
+                           event.mouseButton.button == sf::Mouse::Right) {
+                    handleMouseClick(event.mouseButton);
+                }
+            } else if (event.type == sf::Event::MouseButtonReleased) {
+                if (event.mouseButton.button == sf::Mouse::Middle) {
+                    dragging = false;
+                }
+            } else if (event.type == sf::Event::MouseMoved && dragging) {
+                const sf::Vector2i current = sf::Mouse::getPosition(window);
+                const sf::Vector2i delta = current - lastMousePosition;
+                camera.move(-static_cast<float>(delta.x) * zoomLevel,
+                            -static_cast<float>(delta.y) * zoomLevel);
+                lastMousePosition = current;
+            } else if (event.type == sf::Event::MouseWheelScrolled) {
+                if (event.mouseWheelScroll.delta > 0.f) {
+                    camera.zoom(0.9f);
+                    zoomLevel *= 0.9f;
+                } else {
+                    camera.zoom(1.1f);
+                    zoomLevel *= 1.1f;
                 }
             }
         }
 
-        // Auto-tick if not paused
         if (!isPaused) {
-            float dt = clock.restart().asSeconds();
-            timeAccumulator += dt;
+            timeAccumulator += clock.restart().asSeconds();
             if (timeAccumulator >= TICK_INTERVAL) {
-                timeAccumulator = 0.f;
+                timeAccumulator -= TICK_INTERVAL;
                 simulateOneTick();
                 logTrainTrace();
                 logSwitchState();
 
                 if (isSimulationComplete()) {
-                    cout << "\n*** SIMULATION COMPLETE at tick " << current_tick << " ***\n";
                     isPaused = true;
+                    cout << "Simulation complete at tick " << current_tick << "\n";
                 }
             }
         } else {
             clock.restart();
         }
 
-        // Clear window
         window.clear(sf::Color(30, 30, 30));
+        window.setView(camera);
 
-        // Draw grid tiles
         sf::Sprite tileSprite;
         for (int row = 0; row < grid_rows; ++row) {
             for (int col = 0; col < grid_cols; ++col) {
-                char tile = grid[row][col];
-                float x = col * TILE_SIZE * 0.5f;  // Adjust for scale
-                float y = row * TILE_SIZE * 0.5f;  // Adjust for scale
+                const char tile = grid[row][col];
+                const float x = col * WORLD_TILE_SIZE;
+                const float y = row * WORLD_TILE_SIZE;
+                bool drawTile = true;
 
-                // Choose texture based on tile type
-                if (tile == '-' || tile == '=' || tile == '|') {
-                    tileSprite.setTexture(trackStraightTexture);
-                    tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
-                    if (tile == '|') {
-                        tileSprite.setRotation(90.f);
-                    }
+                if (tile == '-' || tile == '|' || tile == '=') {
+                    tileSprite.setTexture(tile == '=' ? safetyTexture : trackStraightTexture);
+                    tileSprite.setRotation(tile == '|' ? 90.f : 0.f);
                 } else if (tile == '+') {
                     tileSprite.setTexture(trackCrossTexture);
                     tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
                 } else if (tile == '/') {
-                    tileSprite.setTexture(trackCurveTexture);
+                    tileSprite.setTexture(trackCurveUpTexture);
                     tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
                 } else if (tile == '\\') {
-                    tileSprite.setTexture(trackCurveTexture);
-                    tileSprite.setRotation(90.f);
-                    tileSprite.setPosition(x, y);
-                } else if (tile == 'A') {
-                    tileSprite.setTexture(switchATexture);
+                    tileSprite.setTexture(trackCurveDownTexture);
                     tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
-                } else if (tile == 'B') {
-                    tileSprite.setTexture(switchBTexture);
+                } else if (isSwitchTile(col, row)) {
+                    const int switchIndex = getSwitchIndex(col, row);
+                    tileSprite.setTexture(
+                        switchIndex >= 0 && switch_state[switchIndex] == 1
+                            ? switchBTexture : switchATexture);
                     tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
                 } else if (tile == 'S') {
                     tileSprite.setTexture(sourceTexture);
                     tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
                 } else if (tile == 'D') {
                     tileSprite.setTexture(destTexture);
                     tileSprite.setRotation(0.f);
-                    tileSprite.setPosition(x, y);
                 } else {
-                    continue;
+                    drawTile = false;
                 }
 
-                tileSprite.setScale(0.5f, 0.5f);
-                window.draw(tileSprite);
+                if (drawTile) {
+                    tileSprite.setPosition(x, y);
+                    tileSprite.setScale(0.5f, 0.5f);
+                    window.draw(tileSprite);
+                }
             }
         }
 
-        // Draw trains
         sf::Sprite trainSprite;
-        for (int i = 0; i < MAX_TRAINS; ++i) {
+        for (int i = 0; i < total_trains; ++i) {
             if (!train_active[i]) continue;
+            const int direction = train_direction[i];
+            if (direction < DIR_UP || direction > DIR_LEFT) continue;
 
-            int tx = train_x[i];
-            int ty = train_y[i];
-            int dir = train_direction[i];
-
-            float screenX = tx * TILE_SIZE * 0.5f;  // Adjust for scale
-            float screenY = ty * TILE_SIZE * 0.5f;  // Adjust for scale
-
-            trainSprite.setTexture(trainTextures[dir]);
-            trainSprite.setPosition(screenX, screenY);
+            trainSprite.setTexture(trainTextures[direction]);
+            trainSprite.setPosition(train_x[i] * WORLD_TILE_SIZE,
+                                    train_y[i] * WORLD_TILE_SIZE);
             trainSprite.setScale(0.4f, 0.4f);
             window.draw(trainSprite);
         }
 
-        // Draw UI text
-        sf::Text infoText;
-        infoText.setFont(font);
-        infoText.setCharacterSize(18);
-        infoText.setFillColor(sf::Color::White);
-        infoText.setString("Tick: " + to_string(current_tick) + 
-                          (isPaused ? " [PAUSED]" : "") +
-                          "\nPress SPACE to pause/resume\nPress . to step");
-        infoText.setPosition(10, 10);
-        
-        // Draw text in screen coordinates (not world)
-        window.setView(window.getDefaultView());
-        window.draw(infoText);
-        window.setView(camera);
+        if (fontLoaded) {
+            sf::Text infoText;
+            infoText.setFont(font);
+            infoText.setCharacterSize(18);
+            infoText.setFillColor(sf::Color::White);
+            infoText.setString("Tick: " + to_string(current_tick) +
+                               (isPaused ? " [PAUSED]" : "") +
+                               "\nSPACE: pause/resume  .: step\nLeft click: safety  Right click: switch\nMiddle drag: pan  Wheel: zoom");
+            infoText.setPosition(10.f, 10.f);
+            window.setView(window.getDefaultView());
+            window.draw(infoText);
+        }
 
         window.display();
     }
 }
 
 void cleanupApp() {
-    // Nothing specific to clean up for now
+    if (window.isOpen()) window.close();
 }
