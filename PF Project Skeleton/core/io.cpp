@@ -3,6 +3,8 @@
 #include <string>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
+#include <cstdio>
 #include "simulation_state.h"
 #include "io.h"
 #include "trains.h"
@@ -39,8 +41,23 @@ bool loadLevelFile(string filepath) {
     grid_rows = 0;
     grid_cols = 0;
 
-    for (int i = 0; i < MAX_SWITCHES; i++)
+    for (int i = 0; i < MAX_SWITCHES; i++) {
         switch_active[i] = false;
+        switch_x[i] = -1;
+        switch_y[i] = -1;
+        switch_flip_queued[i] = false;
+        for (int d = 0; d < 4; ++d) {
+            switch_counters[i][d] = 0;
+            switch_k_values[i][d] = 0;
+        }
+    }
+    for (int i = 0; i < MAX_TRAINS; ++i) {
+        train_crashed[i] = false;
+        train_spawn_x[i] = -1;
+        train_spawn_y[i] = -1;
+        train_finished[i] = false;
+        train_active[i] = false;
+    }
 
     string rawLine;
     string section = "NONE";
@@ -154,12 +171,27 @@ bool loadLevelFile(string filepath) {
             train_spawn_tick[i] = spawn_tick;
             train_dest_x[i] = dest_x;
             train_dest_y[i] = dest_y;
+
+            // Bind each train to the nearest source when the level is loaded.
+            int nearestDistance = 1000000;
+            for (int r = 0; r < grid_rows; ++r) {
+                for (int col = 0; col < grid_cols; ++col) {
+                    if (grid[r][col] != 'S') continue;
+                    const int distance = abs(col - dest_x) + abs(r - dest_y);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        train_spawn_x[i] = col;
+                        train_spawn_y[i] = r;
+                    }
+                }
+            }
             train_wait[i] = wait_time;
             train_priority[i] = priority;
 
             train_id[i] = i;
             train_active[i] = false;
             train_finished[i] = false;
+            train_crashed[i] = false;
             train_arrival_tick[i] = -1;
             
             // Position will be set when train spawns
