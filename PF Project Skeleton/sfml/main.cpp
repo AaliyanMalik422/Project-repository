@@ -2,6 +2,8 @@
 #include <string>
 #include <cstdlib>
 #include <ctime>
+#include <chrono>
+#include <thread>
 #include "../core/simulation_state.h"
 #include "../core/simulation.h"
 #include "../core/io.h"
@@ -18,10 +20,8 @@ static void clearScreen() {
 }
 
 static void sleepMs(int milliseconds) {
-    clock_t start = clock();
-    clock_t end = start + (milliseconds * CLOCKS_PER_SEC / 1000);
-    while (clock() < end) {
-        // Busy wait
+    if (milliseconds > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     }
 }
 
@@ -77,6 +77,9 @@ static void printAsciiGrid() {
         cout << "Train " << t << ": ";
         if (train_finished[t]) {
             cout << "FINISHED at tick " << train_arrival_tick[t];
+        } else if (train_crashed[t]) {
+            cout << "CRASHED at (" << (train_x[t] + 1) << ","
+                 << (train_y[t] + 1) << ")";
         } else if (train_active[t]) {
             cout << "ACTIVE pos=(" << (train_x[t] + 1) << "," << (train_y[t] + 1) << ")"
                  << " dir=" << getTrainSymbol(train_direction[t])
