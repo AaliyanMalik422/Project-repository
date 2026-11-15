@@ -53,13 +53,13 @@ bool initializeApp() {
     }
 
     // Load track textures
-    loadTex(trackStraightTexture, "Sprites/track_straight.png");
-    loadTex(trackCurveTexture, "Sprites/track_curve.png");
+    loadTex(trackStraightTexture, "Sprites/track_horizontal.png");
+    loadTex(trackCurveTexture, "Sprites/track_diagonal_down.png");
     loadTex(trackCrossTexture, "Sprites/track_cross.png");
     loadTex(switchATexture, "Sprites/switch_A.png");
     loadTex(switchBTexture, "Sprites/switch_B.png");
-    loadTex(sourceTexture, "Sprites/source.png");
-    loadTex(destTexture, "Sprites/destination.png");
+    loadTex(sourceTexture, "Sprites/tile_source_blue.png");
+    loadTex(destTexture, "Sprites/tile_destination.png");
 
     // Load train textures (4 directions: UP=0, DOWN=1, LEFT=2, RIGHT=3)
     loadTex(trainTextures[0], "Sprites/train_up.png");
@@ -137,7 +137,7 @@ void runApp() {
                 float y = row * TILE_SIZE * 0.5f;  // Adjust for scale
 
                 // Choose texture based on tile type
-                if (tile == '-' || tile == '|') {
+                if (tile == '-' || tile == '=' || tile == '|') {
                     tileSprite.setTexture(trackStraightTexture);
                     tileSprite.setRotation(0.f);
                     tileSprite.setPosition(x, y);
