@@ -1,5 +1,5 @@
 CXX ?= g++
-CXXFLAGS ?= -std=c++11 -Wall -Wextra -pedantic
+CXXFLAGS ?= -std=c++17 -Wall -Wextra -pedantic
 LDFLAGS ?= -lsfml-graphics -lsfml-window -lsfml-system
 
 CORE_SRCS = core/simulation_state.cpp core/grid.cpp core/simulation.cpp core/io.cpp core/trains.cpp core/switches.cpp
