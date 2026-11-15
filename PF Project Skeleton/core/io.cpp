@@ -5,6 +5,12 @@
 #include <cstring>
 #include <cctype>
 #include <cstdio>
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 #include "simulation_state.h"
 #include "io.h"
 #include "trains.h"
@@ -217,6 +223,11 @@ bool loadLevelFile(string filepath) {
 }
 
 void initializeLogFiles() {
+#ifdef _WIN32
+    _mkdir("out");
+#else
+    mkdir("out", 0755);
+#endif
     ofstream trace("out/trace.csv");
     trace << "Tick,TrainID,X,Y,Direction,State\n";
     trace.close();
