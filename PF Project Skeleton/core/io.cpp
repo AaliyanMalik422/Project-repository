@@ -8,6 +8,7 @@
 #include "simulation_state.h"
 #include "io.h"
 #include "trains.h"
+#include "grid.h"
 
 using namespace std;
 
