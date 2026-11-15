@@ -9,7 +9,13 @@ bool isSwitchTile(int x, int y) {
     if (!isInBounds(x, y)) return false;
 
     const char tile = grid[y][x];
-    return tile >= 'A' && tile <= 'Z' && tile != 'S' && tile != 'D';
+    if (tile == 'S') {
+        const int sourceOrSwitch = 'S' - 'A';
+        return switch_active[sourceOrSwitch] &&
+               switch_x[sourceOrSwitch] == x &&
+               switch_y[sourceOrSwitch] == y;
+    }
+    return tile >= 'A' && tile <= 'Z' && tile != 'D';
 }
 
 int getSwitchIndex(int x, int y) {
@@ -27,7 +33,7 @@ bool isTrackTile(int x, int y) {
 }
 
 bool isSpawnPoint(int x, int y) {
-    return isInBounds(x, y) && grid[y][x] == 'S';
+    return isInBounds(x, y) && grid[y][x] == 'S' && !isSwitchTile(x, y);
 }
 
 bool isDestinationPoint(int x, int y) {
