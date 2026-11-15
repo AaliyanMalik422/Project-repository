@@ -3,9 +3,18 @@
 #include <string>
 #include <cstdlib>
 #include <cstring>
+#include <cctype>
+#include <cstdio>
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 #include "simulation_state.h"
 #include "io.h"
 #include "trains.h"
+#include "grid.h"
 
 using namespace std;
 
@@ -39,8 +48,23 @@ bool loadLevelFile(string filepath) {
     grid_rows = 0;
     grid_cols = 0;
 
-    for (int i = 0; i < MAX_SWITCHES; i++)
+    for (int i = 0; i < MAX_SWITCHES; i++) {
         switch_active[i] = false;
+        switch_x[i] = -1;
+        switch_y[i] = -1;
+        switch_flip_queued[i] = false;
+        for (int d = 0; d < 4; ++d) {
+            switch_counters[i][d] = 0;
+            switch_k_values[i][d] = 0;
+        }
+    }
+    for (int i = 0; i < MAX_TRAINS; ++i) {
+        train_crashed[i] = false;
+        train_spawn_x[i] = -1;
+        train_spawn_y[i] = -1;
+        train_finished[i] = false;
+        train_active[i] = false;
+    }
 
     string rawLine;
     string section = "NONE";
@@ -49,7 +73,9 @@ bool loadLevelFile(string filepath) {
     while (getline(file, rawLine)) {
 
         string line = trim(rawLine);
-        if (line.empty()) continue;
+        // Empty-looking lines inside MAP are real grid rows. Preserve them so
+        // source coordinates in level files remain aligned with the map.
+        if (line.empty() && section != "MAP") continue;
 
         if (line == "ROWS:")       { section = "ROWS"; continue; }
         if (line == "COLS:")       { section = "COLS"; continue; }
@@ -152,17 +178,37 @@ bool loadLevelFile(string filepath) {
             int i = total_trains;
 
             train_spawn_tick[i] = spawn_tick;
-            train_dest_x[i] = dest_x;
-            train_dest_y[i] = dest_y;
+
+            // The level format stores the source coordinate in columns 2 and 3.
+            train_spawn_x[i] = dest_x;
+            train_spawn_y[i] = dest_y;
+
+            // Resolve the nearest destination tile for this source.
+            int nearestDistance = 1000000;
+            train_dest_x[i] = -1;
+            train_dest_y[i] = -1;
+            for (int r = 0; r < grid_rows; ++r) {
+                for (int col = 0; col < grid_cols; ++col) {
+                    if (grid[r][col] != 'D') continue;
+                    const int distance = abs(col - dest_x) + abs(r - dest_y);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        train_dest_x[i] = col;
+                        train_dest_y[i] = r;
+                    }
+                }
+            }
+
             train_wait[i] = wait_time;
             train_priority[i] = priority;
 
             train_id[i] = i;
             train_active[i] = false;
             train_finished[i] = false;
+            train_crashed[i] = false;
             train_arrival_tick[i] = -1;
             
-            // Position will be set when train spawns
+            // Position is assigned from the configured source when spawned.
             train_x[i] = -1;
             train_y[i] = -1;
             train_direction[i] = 0;
@@ -177,6 +223,11 @@ bool loadLevelFile(string filepath) {
 }
 
 void initializeLogFiles() {
+#ifdef _WIN32
+    _mkdir("out");
+#else
+    mkdir("out", 0755);
+#endif
     ofstream trace("out/trace.csv");
     trace << "Tick,TrainID,X,Y,Direction,State\n";
     trace.close();
