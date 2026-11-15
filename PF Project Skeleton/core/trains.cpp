@@ -213,14 +213,14 @@ void detectCollisions() {
                 crash[i] = true;
                 crash[j] = true;
             } else if (headOnSwap) {
-                // A train cannot safely enter a tile occupied by a train that
-                // has been told to wait. Hold both until the route is clear.
-                wait[i] = true;
-                wait[j] = true;
+                // Two trains attempting to exchange occupied tiles collide.
+                crash[i] = true;
+                crash[j] = true;
             } else if (distanceI > distanceJ) {
-                wait[j] = true;
-            } else {
+                // The train farther from its destination yields.
                 wait[i] = true;
+            } else {
+                wait[j] = true;
             }
         }
     }
