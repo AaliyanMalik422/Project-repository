@@ -169,22 +169,27 @@ bool loadLevelFile(string filepath) {
             int i = total_trains;
 
             train_spawn_tick[i] = spawn_tick;
-            train_dest_x[i] = dest_x;
-            train_dest_y[i] = dest_y;
 
-            // Bind each train to the nearest source when the level is loaded.
+            // The level format stores the source coordinate in columns 2 and 3.
+            train_spawn_x[i] = dest_x;
+            train_spawn_y[i] = dest_y;
+
+            // Resolve the nearest destination tile for this source.
             int nearestDistance = 1000000;
+            train_dest_x[i] = -1;
+            train_dest_y[i] = -1;
             for (int r = 0; r < grid_rows; ++r) {
                 for (int col = 0; col < grid_cols; ++col) {
-                    if (grid[r][col] != 'S') continue;
+                    if (grid[r][col] != 'D') continue;
                     const int distance = abs(col - dest_x) + abs(r - dest_y);
                     if (distance < nearestDistance) {
                         nearestDistance = distance;
-                        train_spawn_x[i] = col;
-                        train_spawn_y[i] = r;
+                        train_dest_x[i] = col;
+                        train_dest_y[i] = r;
                     }
                 }
             }
+
             train_wait[i] = wait_time;
             train_priority[i] = priority;
 
@@ -194,7 +199,7 @@ bool loadLevelFile(string filepath) {
             train_crashed[i] = false;
             train_arrival_tick[i] = -1;
             
-            // Position will be set when train spawns
+            // Position is assigned from the configured source when spawned.
             train_x[i] = -1;
             train_y[i] = -1;
             train_direction[i] = 0;
