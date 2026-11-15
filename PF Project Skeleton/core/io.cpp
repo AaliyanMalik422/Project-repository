@@ -66,7 +66,7 @@ bool loadLevelFile(string filepath) {
     while (getline(file, rawLine)) {
 
         string line = trim(rawLine);
-        if (line.empty()) continue;
+        // Empty-looking lines inside MAP are real grid rows. Preserve them so\n        // source coordinates in level files remain aligned with the map.\n        if (line.empty() && section != "MAP") continue;
 
         if (line == "ROWS:")       { section = "ROWS"; continue; }
         if (line == "COLS:")       { section = "COLS"; continue; }
